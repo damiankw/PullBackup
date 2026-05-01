@@ -56,7 +56,7 @@ export default function Login() {
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 50%)',
+        background: 'radial-gradient(circle at 20% 50%, rgba(20, 184, 166, 0.1) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(20, 184, 166, 0.1) 0%, transparent 50%)',
         pointerEvents: 'none',
       },
     }}>
@@ -75,12 +75,12 @@ export default function Login() {
             alignItems: 'center',
           }}>
             <Box sx={{
-              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+              background: '#14b8a6',
               borderRadius: 4,
               p: 2,
               mb: 2,
               display: 'inline-flex',
-              boxShadow: '0 8px 32px rgba(99, 102, 241, 0.3)',
+              boxShadow: '0 8px 32px rgba(20, 184, 166, 0.3)',
             }}>
               <CloudSyncIcon sx={{ fontSize: 48, color: 'white' }} />
             </Box>
@@ -88,9 +88,7 @@ export default function Login() {
               variant="h3" 
               sx={{ 
                 fontWeight: 700,
-                background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
+                color: '#14b8a6',
                 mb: 1,
               }}
             >
@@ -152,10 +150,10 @@ export default function Login() {
                   mb: 2,
                   '& .MuiOutlinedInput-root': {
                     '&:hover fieldset': {
-                      borderColor: '#6366f1',
+                      borderColor: '#14b8a6',
                     },
                     '&.Mui-focused fieldset': {
-                      borderColor: '#6366f1',
+                      borderColor: '#14b8a6',
                     },
                   },
                 }}
@@ -187,10 +185,10 @@ export default function Login() {
                   mb: 3,
                   '& .MuiOutlinedInput-root': {
                     '&:hover fieldset': {
-                      borderColor: '#6366f1',
+                      borderColor: '#14b8a6',
                     },
                     '&.Mui-focused fieldset': {
-                      borderColor: '#6366f1',
+                      borderColor: '#14b8a6',
                     },
                   },
                 }}

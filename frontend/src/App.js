@@ -11,20 +11,22 @@ import Servers from './pages/Servers';
 import SSHKeys from './pages/SSHKeys';
 import BackupJobs from './pages/BackupJobs';
 import BackupHistory from './pages/BackupHistory';
+import Users from './pages/Users';
+import Profile from './pages/Profile';
 import Layout from './components/Layout';
 
 const theme = createTheme({
   palette: {
     mode: 'dark',
     primary: {
-      main: '#6366f1',
-      light: '#818cf8',
-      dark: '#4f46e5',
+      main: '#14b8a6',
+      light: '#5eead4',
+      dark: '#0d9488',
     },
     secondary: {
-      main: '#8b5cf6',
-      light: '#a78bfa',
-      dark: '#7c3aed',
+      main: '#14b8a6',
+      light: '#5eead4',
+      dark: '#0d9488',
     },
     success: {
       main: '#10b981',
@@ -125,9 +127,9 @@ const theme = createTheme({
           transition: 'all 0.2s ease-in-out',
         },
         contained: {
-          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+          background: '#14b8a6',
           '&:hover': {
-            background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+            background: '#0d9488',
           },
         },
       },
@@ -202,6 +204,8 @@ function App() {
               <Route path="ssh-keys" element={<SSHKeys />} />
               <Route path="backup-jobs" element={<BackupJobs />} />
               <Route path="backup-history" element={<BackupHistory />} />
+              <Route path="users" element={<Users />} />
+              <Route path="profile" element={<Profile />} />
             </Route>
           </Routes>
         </BrowserRouter>

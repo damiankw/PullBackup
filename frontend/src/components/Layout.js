@@ -23,6 +23,8 @@ import {
   History as HistoryIcon,
   Logout as LogoutIcon,
   CloudSync as CloudSyncIcon,
+  People as PeopleIcon,
+  Person as PersonIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../AuthContext';
 
@@ -34,13 +36,15 @@ const menuItems = [
   { text: 'SSH Keys', icon: <VpnKeyIcon />, path: '/ssh-keys' },
   { text: 'Backup Jobs', icon: <BackupIcon />, path: '/backup-jobs' },
   { text: 'History', icon: <HistoryIcon />, path: '/backup-history' },
+  { text: 'Users', icon: <PeopleIcon />, path: '/users', adminOnly: true },
+  { text: 'Profile', icon: <PersonIcon />, path: '/profile' },
 ];
 
 export default function Layout() {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -50,6 +54,14 @@ export default function Layout() {
     logout();
     navigate('/login');
   };
+
+  // Filter menu items based on user role
+  const visibleMenuItems = menuItems.filter(item => {
+    if (item.adminOnly && user?.role !== 'admin') {
+      return false;
+    }
+    return true;
+  });
 
   const drawer = (
     <Box sx={{ 
@@ -61,7 +73,7 @@ export default function Layout() {
     }}>
       <Box sx={{ p: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
         <Box sx={{
-          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+          background: '#14b8a6',
           borderRadius: 3,
           p: 1.5,
           display: 'flex',
@@ -73,7 +85,7 @@ export default function Layout() {
         <Box>
           <Typography variant="h5" sx={{ 
             fontWeight: 700,
-            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+            background: '#14b8a6',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
           }}>
@@ -88,7 +100,7 @@ export default function Layout() {
       <Divider sx={{ borderColor: 'rgba(148, 163, 184, 0.1)', mx: 2 }} />
       
       <List sx={{ flex: 1, px: 2, py: 2 }}>
-        {menuItems.map((item) => (
+        {visibleMenuItems.map((item) => (
           <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
             <ListItemButton
               selected={location.pathname === item.path}
@@ -97,10 +109,10 @@ export default function Layout() {
                 borderRadius: 2,
                 py: 1.5,
                 '&.Mui-selected': {
-                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%)',
-                  borderLeft: '3px solid #6366f1',
+                  background: 'rgba(20, 184, 166, 0.2)',
+                  borderLeft: '3px solid #14b8a6',
                   '&:hover': {
-                    background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.3) 0%, rgba(139, 92, 246, 0.3) 100%)',
+                    background: 'rgba(20, 184, 166, 0.3)',
                   },
                 },
                 '&:hover': {
@@ -110,7 +122,7 @@ export default function Layout() {
               }}
             >
               <ListItemIcon sx={{ 
-                color: location.pathname === item.path ? '#6366f1' : 'inherit',
+                color: location.pathname === item.path ? '#14b8a6' : 'inherit',
                 minWidth: 40,
               }}>
                 {item.icon}
@@ -173,7 +185,7 @@ export default function Layout() {
             <MenuIcon />
           </IconButton>
           <Typography variant="h6" noWrap component="div">
-            {menuItems.find((item) => item.path === location.pathname)?.text || 'PullBackup'}
+            {visibleMenuItems.find((item) => item.path === location.pathname)?.text || 'PullBackup'}
           </Typography>
         </Toolbar>
       </AppBar>

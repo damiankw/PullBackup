@@ -53,9 +53,9 @@ export default function Dashboard() {
     return (
       <Box sx={{ width: '100%' }}>
         <LinearProgress sx={{
-          background: 'linear-gradient(90deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
+          background: 'rgba(20, 184, 166, 0.1)',
           '& .MuiLinearProgress-bar': {
-            background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)',
+            background: '#14b8a6',
           },
         }} />
       </Box>
@@ -71,28 +71,28 @@ export default function Dashboard() {
       title: 'Total Servers',
       value: stats?.total_servers || 0,
       icon: <StorageIcon sx={{ fontSize: 40 }} />,
-      gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      gradient: '#14b8a6',
       iconBg: 'rgba(102, 126, 234, 0.1)',
     },
     {
       title: 'Backup Jobs',
       value: stats?.total_backup_jobs || 0,
       icon: <BackupIcon sx={{ fontSize: 40 }} />,
-      gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+      gradient: '#f093fb',
       iconBg: 'rgba(240, 147, 251, 0.1)',
     },
     {
       title: 'Successful Backups',
       value: stats?.successful_backups || 0,
       icon: <CheckCircleIcon sx={{ fontSize: 40 }} />,
-      gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+      gradient: '#4facfe',
       iconBg: 'rgba(79, 172, 254, 0.1)',
     },
     {
       title: 'Failed Backups',
       value: stats?.failed_backups || 0,
       icon: <ErrorIcon sx={{ fontSize: 40 }} />,
-      gradient: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+      gradient: '#fa709a',
       iconBg: 'rgba(250, 112, 154, 0.1)',
     },
   ];
@@ -103,7 +103,7 @@ export default function Dashboard() {
         <Typography variant="h3" sx={{ 
           fontWeight: 700, 
           mb: 1,
-          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+          background: '#14b8a6',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
         }}>
@@ -191,7 +191,7 @@ export default function Dashboard() {
                   background: 'rgba(148, 163, 184, 0.1)',
                   '& .MuiLinearProgress-bar': {
                     borderRadius: 6,
-                    background: 'linear-gradient(90deg, #10b981 0%, #34d399 100%)',
+                    background: '#10b981',
                   },
                 }}
               />
@@ -257,10 +257,17 @@ export default function Dashboard() {
                         background: '#ef4444',
                         flexShrink: 0,
                       }} />
-                      <Typography variant="caption" sx={{ color: 'text.secondary', flex: 1 }} noWrap>
-                        {failure.backup_job?.name || `Job #${failure.backup_job_id}`}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.7rem' }}>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }} noWrap>
+                          {failure.backup_job?.name || `Job #${failure.backup_job_id}`}
+                        </Typography>
+                        {failure.backup_job?.server?.name && (
+                          <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.65rem', display: 'block' }} noWrap>
+                            {failure.backup_job.server.name}
+                          </Typography>
+                        )}
+                      </Box>
+                      <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.7rem', flexShrink: 0, ml: 1 }}>
                         {failure.started_at ? new Date(failure.started_at).toLocaleDateString() : 'N/A'}
                       </Typography>
                     </Box>
@@ -280,13 +287,13 @@ export default function Dashboard() {
               <Box sx={{
                 p: 2,
                 borderRadius: 2,
-                background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
-                border: '1px solid rgba(99, 102, 241, 0.2)',
+                background: 'rgba(20, 184, 166, 0.1)',
+                border: '1px solid rgba(20, 184, 166, 0.2)',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
                 '&:hover': {
-                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%)',
-                  borderColor: 'rgba(99, 102, 241, 0.4)',
+                  background: 'rgba(20, 184, 166, 0.15)',
+                  borderColor: 'rgba(20, 184, 166, 0.4)',
                 },
               }}>
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>
@@ -299,12 +306,12 @@ export default function Dashboard() {
               <Box sx={{
                 p: 2,
                 borderRadius: 2,
-                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(52, 211, 153, 0.1) 100%)',
+                background: 'rgba(16, 185, 129, 0.1)',
                 border: '1px solid rgba(16, 185, 129, 0.2)',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
                 '&:hover': {
-                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(52, 211, 153, 0.15) 100%)',
+                  background: 'rgba(16, 185, 129, 0.15)',
                   borderColor: 'rgba(16, 185, 129, 0.4)',
                 },
               }}>
@@ -318,12 +325,12 @@ export default function Dashboard() {
               <Box sx={{
                 p: 2,
                 borderRadius: 2,
-                background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(251, 191, 36, 0.1) 100%)',
+                background: 'rgba(245, 158, 11, 0.1)',
                 border: '1px solid rgba(245, 158, 11, 0.2)',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
                 '&:hover': {
-                  background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(251, 191, 36, 0.15) 100%)',
+                  background: 'rgba(245, 158, 11, 0.15)',
                   borderColor: 'rgba(245, 158, 11, 0.4)',
                 },
               }}>

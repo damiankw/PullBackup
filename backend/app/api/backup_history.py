@@ -19,7 +19,9 @@ def list_backup_history(
     db: Session = Depends(get_db)
 ):
     """List backup history with optional filtering by job."""
-    query = db.query(BackupHistory).join(BackupJob).options(joinedload(BackupHistory.backup_job))
+    query = db.query(BackupHistory).join(BackupJob).options(
+        joinedload(BackupHistory.backup_job).joinedload(BackupJob.server)
+    )
     
     # Admin can see all history, regular users see only their own
     if current_user.role.value != 'admin':

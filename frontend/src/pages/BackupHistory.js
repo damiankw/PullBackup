@@ -16,6 +16,7 @@ import {
   DialogActions,
   Button,
   IconButton,
+  TableSortLabel,
 } from '@mui/material';
 import {
   Visibility as VisibilityIcon,
@@ -26,6 +27,8 @@ export default function BackupHistory() {
   const [history, setHistory] = useState([]);
   const [selectedLog, setSelectedLog] = useState(null);
   const [logDialogOpen, setLogDialogOpen] = useState(false);
+  const [orderBy, setOrderBy] = useState('started_at');
+  const [order, setOrder] = useState('desc');
 
   useEffect(() => {
     fetchHistory();
@@ -80,6 +83,42 @@ export default function BackupHistory() {
     return `${minutes}m ${remainingSeconds}s`;
   };
 
+  const handleSort = (property) => {
+    const isAsc = orderBy === property && order === 'asc';
+    setOrder(isAsc ? 'desc' : 'asc');
+    setOrderBy(property);
+  };
+
+  const sortedHistory = [...history].sort((a, b) => {
+    let aValue = a[orderBy];
+    let bValue = b[orderBy];
+    
+    // Handle nested properties for backup job name and server name
+    if (orderBy === 'backup_job_name') {
+      aValue = a.backup_job?.name || '';
+      bValue = b.backup_job?.name || '';
+    }
+    
+    if (orderBy === 'server_name') {
+      aValue = a.backup_job?.server?.name || '';
+      bValue = b.backup_job?.server?.name || '';
+    }
+    
+    if (orderBy === 'started_at') {
+      aValue = aValue ? new Date(aValue).getTime() : 0;
+      bValue = bValue ? new Date(bValue).getTime() : 0;
+    }
+    
+    if (orderBy === 'bytes_transferred' || orderBy === 'files_transferred') {
+      aValue = aValue || 0;
+      bValue = bValue || 0;
+    }
+    
+    if (aValue < bValue) return order === 'asc' ? -1 : 1;
+    if (aValue > bValue) return order === 'asc' ? 1 : -1;
+    return 0;
+  });
+
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
@@ -90,20 +129,82 @@ export default function BackupHistory() {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Job ID</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell>Started</TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === 'backup_job_name'}
+                  direction={orderBy === 'backup_job_name' ? order : 'asc'}
+                  onClick={() => handleSort('backup_job_name')}
+                >
+                  Backup Job
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === 'server_name'}
+                  direction={orderBy === 'server_name' ? order : 'asc'}
+                  onClick={() => handleSort('server_name')}
+                >
+                  Server
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === 'status'}
+                  direction={orderBy === 'status' ? order : 'asc'}
+                  onClick={() => handleSort('status')}
+                >
+                  Status
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === 'started_at'}
+                  direction={orderBy === 'started_at' ? order : 'asc'}
+                  onClick={() => handleSort('started_at')}
+                >
+                  Started
+                </TableSortLabel>
+              </TableCell>
               <TableCell>Duration</TableCell>
-              <TableCell>Data Transferred</TableCell>
-              <TableCell>Files</TableCell>
-              <TableCell>Triggered By</TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === 'bytes_transferred'}
+                  direction={orderBy === 'bytes_transferred' ? order : 'asc'}
+                  onClick={() => handleSort('bytes_transferred')}
+                >
+                  Data Transferred
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === 'files_transferred'}
+                  direction={orderBy === 'files_transferred' ? order : 'asc'}
+                  onClick={() => handleSort('files_transferred')}
+                >
+                  Files
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === 'triggered_by'}
+                  direction={orderBy === 'triggered_by' ? order : 'asc'}
+                  onClick={() => handleSort('triggered_by')}
+                >
+                  Triggered By
+                </TableSortLabel>
+              </TableCell>
               <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {history.map((entry) => (
+            {sortedHistory.map((entry) => (
               <TableRow key={entry.id}>
-                <TableCell>{entry.backup_job_id}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>
+                  {entry.backup_job?.name || `Job #${entry.backup_job_id}`}
+                </TableCell>
+                <TableCell>
+                  {entry.backup_job?.server?.name || 'Unknown'}
+                </TableCell>
                 <TableCell>{getStatusChip(entry.status)}</TableCell>
                 <TableCell>
                   {entry.started_at ? new Date(entry.started_at).toLocaleString() : 'Not started'}
@@ -133,7 +234,10 @@ export default function BackupHistory() {
           {selectedLog && (
             <Box>
               <Typography variant="subtitle2" gutterBottom>
-                <strong>Backup Job ID:</strong> {selectedLog.backup_job_id}
+                <strong>Backup Job:</strong> {selectedLog.backup_job?.name || `Job #${selectedLog.backup_job_id}`}
+              </Typography>
+              <Typography variant="subtitle2" gutterBottom>
+                <strong>Server:</strong> {selectedLog.backup_job?.server?.name || 'Unknown'}
               </Typography>
               <Typography variant="subtitle2" gutterBottom>
                 <strong>Status:</strong> {getStatusChip(selectedLog.status)}

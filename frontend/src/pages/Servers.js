@@ -17,6 +17,7 @@ import {
   DialogActions,
   TextField,
   Chip,
+  TableSortLabel,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -31,6 +32,8 @@ export default function Servers() {
   const [sshKeys, setSSHKeys] = useState([]);
   const [open, setOpen] = useState(false);
   const [editingServer, setEditingServer] = useState(null);
+  const [orderBy, setOrderBy] = useState('name');
+  const [order, setOrder] = useState('asc');
   const [formData, setFormData] = useState({
     name: '',
     hostname: '',
@@ -127,6 +130,26 @@ export default function Servers() {
     }
   };
 
+  const handleSort = (property) => {
+    const isAsc = orderBy === property && order === 'asc';
+    setOrder(isAsc ? 'desc' : 'asc');
+    setOrderBy(property);
+  };
+
+  const sortedServers = [...servers].sort((a, b) => {
+    let aValue = a[orderBy];
+    let bValue = b[orderBy];
+    
+    if (orderBy === 'connection_test_success') {
+      aValue = aValue === true ? 2 : aValue === false ? 1 : 0;
+      bValue = bValue === true ? 2 : bValue === false ? 1 : 0;
+    }
+    
+    if (aValue < bValue) return order === 'asc' ? -1 : 1;
+    if (aValue > bValue) return order === 'asc' ? 1 : -1;
+    return 0;
+  });
+
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
@@ -144,16 +167,56 @@ export default function Servers() {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Name</TableCell>
-              <TableCell>Hostname</TableCell>
-              <TableCell>Port</TableCell>
-              <TableCell>Username</TableCell>
-              <TableCell>Status</TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === 'name'}
+                  direction={orderBy === 'name' ? order : 'asc'}
+                  onClick={() => handleSort('name')}
+                >
+                  Name
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === 'hostname'}
+                  direction={orderBy === 'hostname' ? order : 'asc'}
+                  onClick={() => handleSort('hostname')}
+                >
+                  Hostname
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === 'port'}
+                  direction={orderBy === 'port' ? order : 'asc'}
+                  onClick={() => handleSort('port')}
+                >
+                  Port
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === 'username'}
+                  direction={orderBy === 'username' ? order : 'asc'}
+                  onClick={() => handleSort('username')}
+                >
+                  Username
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === 'connection_test_success'}
+                  direction={orderBy === 'connection_test_success' ? order : 'asc'}
+                  onClick={() => handleSort('connection_test_success')}
+                >
+                  Status
+                </TableSortLabel>
+              </TableCell>
               <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {servers.map((server) => (
+            {sortedServers.map((server) => (
               <TableRow key={server.id}>
                 <TableCell>{server.name}</TableCell>
                 <TableCell>{server.hostname}</TableCell>

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 from datetime import datetime
 
@@ -24,7 +24,7 @@ def list_backup_jobs(
     db: Session = Depends(get_db)
 ):
     """List all backup jobs for current user."""
-    query = db.query(BackupJob)
+    query = db.query(BackupJob).options(joinedload(BackupJob.server))
     
     # Admin can see all jobs, regular users see only their own
     if current_user.role.value != 'admin':

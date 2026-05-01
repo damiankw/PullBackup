@@ -5,7 +5,7 @@ import logging
 
 from app.core.database import engine, Base
 from app.core.config import settings
-from app.api import auth, servers, ssh_keys, backup_jobs, backup_history, dashboard
+from app.api import auth, servers, ssh_keys, backup_jobs, backup_history, dashboard, users
 from app.services.scheduler import backup_scheduler
 
 # Configure logging
@@ -54,6 +54,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(servers.router, prefix="/api/servers", tags=["Servers"])
 app.include_router(ssh_keys.router, prefix="/api/ssh-keys", tags=["SSH Keys"])
 app.include_router(backup_jobs.router, prefix="/api/backup-jobs", tags=["Backup Jobs"])

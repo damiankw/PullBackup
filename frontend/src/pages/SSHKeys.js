@@ -16,6 +16,7 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  TableSortLabel,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -26,6 +27,8 @@ import api from '../api';
 export default function SSHKeys() {
   const [keys, setKeys] = useState([]);
   const [open, setOpen] = useState(false);
+  const [orderBy, setOrderBy] = useState('name');
+  const [order, setOrder] = useState('asc');
   const [formData, setFormData] = useState({
     name: '',
     private_key: '',
@@ -76,6 +79,26 @@ export default function SSHKeys() {
     }
   };
 
+  const handleSort = (property) => {
+    const isAsc = orderBy === property && order === 'asc';
+    setOrder(isAsc ? 'desc' : 'asc');
+    setOrderBy(property);
+  };
+
+  const sortedKeys = [...keys].sort((a, b) => {
+    let aValue = a[orderBy];
+    let bValue = b[orderBy];
+    
+    if (orderBy === 'created_at') {
+      aValue = new Date(aValue).getTime();
+      bValue = new Date(bValue).getTime();
+    }
+    
+    if (aValue < bValue) return order === 'asc' ? -1 : 1;
+    if (aValue > bValue) return order === 'asc' ? 1 : -1;
+    return 0;
+  });
+
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
@@ -93,14 +116,38 @@ export default function SSHKeys() {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Name</TableCell>
-              <TableCell>Fingerprint</TableCell>
-              <TableCell>Created At</TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === 'name'}
+                  direction={orderBy === 'name' ? order : 'asc'}
+                  onClick={() => handleSort('name')}
+                >
+                  Name
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === 'fingerprint'}
+                  direction={orderBy === 'fingerprint' ? order : 'asc'}
+                  onClick={() => handleSort('fingerprint')}
+                >
+                  Fingerprint
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === 'created_at'}
+                  direction={orderBy === 'created_at' ? order : 'asc'}
+                  onClick={() => handleSort('created_at')}
+                >
+                  Created At
+                </TableSortLabel>
+              </TableCell>
               <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {keys.map((key) => (
+            {sortedKeys.map((key) => (
               <TableRow key={key.id}>
                 <TableCell>{key.name}</TableCell>
                 <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>

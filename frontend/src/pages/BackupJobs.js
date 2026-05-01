@@ -17,6 +17,7 @@ import {
   DialogActions,
   TextField,
   Chip,
+  TableSortLabel,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -31,6 +32,8 @@ export default function BackupJobs() {
   const [servers, setServers] = useState([]);
   const [open, setOpen] = useState(false);
   const [editingJob, setEditingJob] = useState(null);
+  const [orderBy, setOrderBy] = useState('name');
+  const [order, setOrder] = useState('asc');
   const [formData, setFormData] = useState({
     name: '',
     server_id: '',
@@ -127,6 +130,37 @@ export default function BackupJobs() {
     }
   };
 
+  const handleSort = (property) => {
+    const isAsc = orderBy === property && order === 'asc';
+    setOrder(isAsc ? 'desc' : 'asc');
+    setOrderBy(property);
+  };
+
+  const sortedJobs = [...jobs].sort((a, b) => {
+    let aValue = a[orderBy];
+    let bValue = b[orderBy];
+    
+    // Handle nested server name property
+    if (orderBy === 'server_name') {
+      aValue = a.server?.name || '';
+      bValue = b.server?.name || '';
+    }
+    
+    if (orderBy === 'last_run') {
+      aValue = aValue ? new Date(aValue).getTime() : 0;
+      bValue = bValue ? new Date(bValue).getTime() : 0;
+    }
+    
+    if (orderBy === 'is_active') {
+      aValue = aValue ? 1 : 0;
+      bValue = bValue ? 1 : 0;
+    }
+    
+    if (aValue < bValue) return order === 'asc' ? -1 : 1;
+    if (aValue > bValue) return order === 'asc' ? 1 : -1;
+    return 0;
+  });
+
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
@@ -134,7 +168,7 @@ export default function BackupJobs() {
           <Typography variant="h3" sx={{ 
             fontWeight: 700, 
             mb: 1,
-            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+            background: '#14b8a6',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
           }}>
@@ -160,18 +194,67 @@ export default function BackupJobs() {
         <Table>
           <TableHead>
             <TableRow sx={{
-              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%)',
+              background: 'rgba(20, 184, 166, 0.05)',
             }}>
-              <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Name</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Remote Path</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Schedule</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Last Run</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Status</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>
+                <TableSortLabel
+                  active={orderBy === 'name'}
+                  direction={orderBy === 'name' ? order : 'asc'}
+                  onClick={() => handleSort('name')}
+                >
+                  Name
+                </TableSortLabel>
+              </TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>
+                <TableSortLabel
+                  active={orderBy === 'server_name'}
+                  direction={orderBy === 'server_name' ? order : 'asc'}
+                  onClick={() => handleSort('server_name')}
+                >
+                  Server
+                </TableSortLabel>
+              </TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>
+                <TableSortLabel
+                  active={orderBy === 'remote_path'}
+                  direction={orderBy === 'remote_path' ? order : 'asc'}
+                  onClick={() => handleSort('remote_path')}
+                >
+                  Remote Path
+                </TableSortLabel>
+              </TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>
+                <TableSortLabel
+                  active={orderBy === 'schedule'}
+                  direction={orderBy === 'schedule' ? order : 'asc'}
+                  onClick={() => handleSort('schedule')}
+                >
+                  Schedule
+                </TableSortLabel>
+              </TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>
+                <TableSortLabel
+                  active={orderBy === 'last_run'}
+                  direction={orderBy === 'last_run' ? order : 'asc'}
+                  onClick={() => handleSort('last_run')}
+                >
+                  Last Run
+                </TableSortLabel>
+              </TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>
+                <TableSortLabel
+                  active={orderBy === 'is_active'}
+                  direction={orderBy === 'is_active' ? order : 'asc'}
+                  onClick={() => handleSort('is_active')}
+                >
+                  Status
+                </TableSortLabel>
+              </TableCell>
               <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {jobs.map((job) => (
+            {sortedJobs.map((job) => (
               <TableRow 
                 key={job.id}
                 sx={{
@@ -182,6 +265,7 @@ export default function BackupJobs() {
                 }}
               >
                 <TableCell sx={{ fontWeight: 600 }}>{job.name}</TableCell>
+                <TableCell>{job.server?.name || 'Unknown'}</TableCell>
                 <TableCell sx={{ 
                   fontFamily: 'monospace', 
                   fontSize: '0.85rem',
@@ -199,7 +283,7 @@ export default function BackupJobs() {
                       label="Active" 
                       size="small"
                       sx={{
-                        background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(52, 211, 153, 0.2) 100%)',
+                        background: 'rgba(16, 185, 129, 0.2)',
                         border: '1px solid rgba(16, 185, 129, 0.3)',
                         color: '#10b981',
                         fontWeight: 600,
@@ -235,7 +319,7 @@ export default function BackupJobs() {
                     size="small" 
                     onClick={() => handleOpen(job)}
                     sx={{
-                      color: '#6366f1',
+                      color: '#14b8a6',
                       '&:hover': {
                         background: 'rgba(99, 102, 241, 0.1)',
                       },

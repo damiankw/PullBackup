@@ -31,7 +31,7 @@ def create_admin_user():
             print("Creating default admin user...")
             admin = User(
                 username="admin",
-                email="admin@pullbackup.local",
+                email="admin@example.com",
                 hashed_password=get_password_hash("admin"),
                 role=UserRole.ADMIN,
                 is_active=True
