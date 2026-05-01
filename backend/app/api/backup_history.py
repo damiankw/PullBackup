@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 
 from app.core.database import get_db
@@ -19,7 +19,7 @@ def list_backup_history(
     db: Session = Depends(get_db)
 ):
     """List backup history with optional filtering by job."""
-    query = db.query(BackupHistory).join(BackupJob)
+    query = db.query(BackupHistory).join(BackupJob).options(joinedload(BackupHistory.backup_job))
     
     # Admin can see all history, regular users see only their own
     if current_user.role.value != 'admin':

@@ -183,6 +183,7 @@ class BackupHistory(BackupHistoryBase):
     bytes_transferred: int = 0
     files_transferred: int = 0
     created_at: datetime
+    backup_job: Optional['BackupJob'] = None
     
     class Config:
         from_attributes = True
