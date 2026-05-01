@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: pullbackup-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./data/pullbackup.db
+      - SECRET_KEY=${SECRET_KEY:-change-this-secret-key-in-production}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - BACKUP_ROOT_DIR=/backups
+      - SSH_KEYS_DIR=/app/ssh_keys
+      - MAX_PARALLEL_BACKUPS=3
+    volumes:
+      - ./data:/app/data
+      - ./backups:/backups
+      - ./ssh_keys:/app/ssh_keys
+    networks:
+      - pullbackup-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: pullbackup-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - pullbackup-network
+
+networks:
+  pullbackup-network:
+    driver: bridge
+
+volumes:
+  data:
+  backups:
+  ssh_keys:
