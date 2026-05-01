@@ -148,6 +148,10 @@ class RsyncService:
             filtered_options = [opt for opt in option_parts if opt != '--delete']
             cmd.extend(filtered_options)
             
+            # Add --stats for detailed statistics
+            if '--stats' not in filtered_options:
+                cmd.append('--stats')
+            
             # Add --link-dest if we have a previous snapshot
             if previous_snapshot:
                 # --link-dest path must be relative to destination or absolute
@@ -237,23 +241,39 @@ class RsyncService:
         try:
             lines = output.split('\n')
             for line in lines:
-                # Look for "sent X bytes  received Y bytes"
-                if 'bytes' in line.lower() and 'sent' in line.lower():
-                    parts = line.split()
+                line = line.strip()
+                
+                # Look for "Total transferred file size: X bytes"
+                # This is the actual uncompressed size of files transferred
+                if 'total transferred file size:' in line.lower():
+                    parts = line.split(':')
                     if len(parts) >= 2:
                         try:
-                            # Extract received bytes (usually the meaningful number)
-                            for i, part in enumerate(parts):
-                                if part == 'received' and i + 1 < len(parts):
-                                    stats['bytes_transferred'] = int(parts[i + 1].replace(',', ''))
-                                    break
+                            # Extract number from "X bytes" or "X,XXX bytes"
+                            byte_part = parts[1].strip().split()[0]
+                            stats['bytes_transferred'] = int(byte_part.replace(',', ''))
                         except (ValueError, IndexError):
                             pass
                 
-                # Count transferred files (basic heuristic)
-                # Each file transfer typically shows a line with the filename
-                if line and not line.startswith(' ') and '/' in line:
-                    stats['files_transferred'] += 1
+                # Look for "Number of regular files transferred: X"
+                elif 'number of regular files transferred:' in line.lower():
+                    parts = line.split(':')
+                    if len(parts) >= 2:
+                        try:
+                            stats['files_transferred'] = int(parts[1].strip().replace(',', ''))
+                        except (ValueError, IndexError):
+                            pass
+                
+                # Fallback: Look for "total size is X" at the end
+                elif stats['bytes_transferred'] == 0 and 'total size is' in line.lower():
+                    parts = line.split()
+                    for i, part in enumerate(parts):
+                        if part == 'is' and i + 1 < len(parts):
+                            try:
+                                stats['bytes_transferred'] = int(parts[i + 1].replace(',', ''))
+                                break
+                            except (ValueError, IndexError):
+                                pass
                     
         except Exception:
             pass
