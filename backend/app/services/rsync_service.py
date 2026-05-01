@@ -66,6 +66,38 @@ class RsyncService:
         except Exception as e:
             return False, f"Connection error: {str(e)}"
     
+    def _find_latest_snapshot(self, base_path: Path) -> Optional[Path]:
+        """
+        Find the most recent snapshot directory for use with --link-dest.
+        
+        Args:
+            base_path: Base backup path to search for snapshots
+            
+        Returns:
+            Path to latest snapshot or None
+        """
+        if not base_path.exists():
+            return None
+        
+        # Find all snapshot directories (formatted as YYYY-MM-DD_HH-MM-SS)
+        snapshots = []
+        for item in base_path.iterdir():
+            if item.is_dir() and len(item.name) >= 10:
+                # Check if it looks like a date directory
+                try:
+                    # Try to parse the directory name as a date
+                    datetime.strptime(item.name[:10], '%Y-%m-%d')
+                    snapshots.append(item)
+                except ValueError:
+                    continue
+        
+        if not snapshots:
+            return None
+        
+        # Sort by name (which sorts by date due to format) and return latest
+        snapshots.sort()
+        return snapshots[-1]
+    
     def execute_backup(
         self,
         hostname: str,
@@ -78,14 +110,15 @@ class RsyncService:
         callback=None
     ) -> Tuple[bool, str, dict]:
         """
-        Execute rsync backup from remote server to local path.
+        Execute incremental rsync backup from remote server to local path.
+        Creates dated snapshots with hardlinks to previous backup for space efficiency.
         
         Args:
             hostname: Remote server hostname
             port: SSH port
             username: SSH username
             remote_path: Path on remote server
-            local_path: Local destination path
+            local_path: Local destination path (base directory for snapshots)
             ssh_key_path: Path to SSH private key
             rsync_options: Custom rsync options
             callback: Optional callback function for progress updates
@@ -94,14 +127,31 @@ class RsyncService:
             Tuple of (success, log_output, stats)
         """
         try:
-            # Prepare local destination
-            local_dest = self.backup_root / local_path.lstrip('/')
-            local_dest.mkdir(parents=True, exist_ok=True)
+            # Create base backup directory for this job
+            base_backup_dir = self.backup_root / local_path.lstrip('/')
+            base_backup_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create dated snapshot directory
+            snapshot_name = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+            snapshot_dir = base_backup_dir / snapshot_name
+            snapshot_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Find previous snapshot for hardlinking
+            previous_snapshot = self._find_latest_snapshot(base_backup_dir)
             
             # Build rsync command
             options = rsync_options or self.rsync_options
             cmd = ["rsync"]
-            cmd.extend(options.split())
+            
+            # Add base options (remove --delete if present)
+            option_parts = options.split()
+            filtered_options = [opt for opt in option_parts if opt != '--delete']
+            cmd.extend(filtered_options)
+            
+            # Add --link-dest if we have a previous snapshot
+            if previous_snapshot:
+                # --link-dest path must be relative to destination or absolute
+                cmd.append(f"--link-dest={previous_snapshot}")
             
             # Add SSH options
             ssh_cmd = f"ssh -p {port} -o StrictHostKeyChecking=no"
@@ -117,7 +167,7 @@ class RsyncService:
                 remote_path += '/'
             
             cmd.append(f"{username}@{hostname}:{remote_path}")
-            cmd.append(str(local_dest) + '/')
+            cmd.append(str(snapshot_dir) + '/')
             
             # Execute rsync
             log_lines = []
@@ -146,11 +196,30 @@ class RsyncService:
             # Parse rsync statistics
             stats = self._parse_rsync_stats(log_output)
             stats['duration'] = (end_time - start_time).total_seconds()
+            stats['snapshot_path'] = str(snapshot_dir)
+            stats['previous_snapshot'] = str(previous_snapshot) if previous_snapshot else None
             
             success = process.returncode == 0
             
-            if not success:
+            if success:
+                log_output += f"\n\n=== Snapshot Info ==="
+                log_output += f"\nSnapshot created: {snapshot_name}"
+                log_output += f"\nFull path: {snapshot_dir}"
+                if previous_snapshot:
+                    log_output += f"\nLinked to previous: {previous_snapshot.name}"
+                    log_output += f"\nNote: Unchanged files are hardlinked to save space"
+                else:
+                    log_output += f"\nNote: First snapshot (full backup)"
+            else:
                 log_output += f"\n\nRsync failed with exit code {process.returncode}"
+                # Clean up failed snapshot directory
+                try:
+                    if snapshot_dir.exists():
+                        import shutil
+                        shutil.rmtree(snapshot_dir)
+                        log_output += f"\nCleaned up incomplete snapshot"
+                except Exception as cleanup_error:
+                    log_output += f"\nWarning: Could not clean up failed snapshot: {cleanup_error}"
             
             return success, log_output, stats
             
@@ -237,6 +306,72 @@ class RsyncService:
             return None
         except Exception:
             return None
+    
+    def list_snapshots(self, local_path: str) -> list:
+        """
+        List all snapshots for a given backup job.
+        
+        Args:
+            local_path: Base backup path
+            
+        Returns:
+            List of snapshot info dictionaries
+        """
+        base_backup_dir = self.backup_root / local_path.lstrip('/')
+        if not base_backup_dir.exists():
+            return []
+        
+        snapshots = []
+        for item in base_backup_dir.iterdir():
+            if item.is_dir():
+                try:
+                    # Try to parse directory name as date
+                    snapshot_date = datetime.strptime(item.name[:19], '%Y-%m-%d_%H-%M-%S')
+                    
+                    # Get size info (rough estimate)
+                    snapshot_info = {
+                        'name': item.name,
+                        'date': snapshot_date.isoformat(),
+                        'path': str(item),
+                    }
+                    snapshots.append(snapshot_info)
+                except (ValueError, IndexError):
+                    continue
+        
+        # Sort by date, newest first
+        snapshots.sort(key=lambda x: x['date'], reverse=True)
+        return snapshots
+    
+    def delete_snapshot(self, local_path: str, snapshot_name: str) -> Tuple[bool, str]:
+        """
+        Delete a specific snapshot.
+        
+        Args:
+            local_path: Base backup path
+            snapshot_name: Name of snapshot directory to delete
+            
+        Returns:
+            Tuple of (success, message)
+        """
+        try:
+            import shutil
+            base_backup_dir = self.backup_root / local_path.lstrip('/')
+            snapshot_dir = base_backup_dir / snapshot_name
+            
+            if not snapshot_dir.exists():
+                return False, "Snapshot not found"
+            
+            # Verify it's a snapshot directory (has date format)
+            try:
+                datetime.strptime(snapshot_name[:19], '%Y-%m-%d_%H-%M-%S')
+            except ValueError:
+                return False, "Invalid snapshot name format"
+            
+            shutil.rmtree(snapshot_dir)
+            return True, f"Snapshot {snapshot_name} deleted successfully"
+            
+        except Exception as e:
+            return False, f"Failed to delete snapshot: {str(e)}"
 
 
 # Singleton instance

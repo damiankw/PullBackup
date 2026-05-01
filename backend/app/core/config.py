@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     BACKUP_ROOT_DIR: str = "/backups"
     SSH_KEYS_DIR: str = "/app/ssh_keys"
     MAX_PARALLEL_BACKUPS: int = 3
-    RSYNC_OPTIONS: str = "-avz --delete"
+    RSYNC_OPTIONS: str = "-avz"
     
     # SMTP Settings
     SMTP_HOST: Optional[str] = None

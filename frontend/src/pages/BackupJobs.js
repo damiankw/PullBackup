@@ -504,6 +504,14 @@ export default function BackupJobs() {
             onChange={(e) => setFormData({ ...formData, local_path: e.target.value })}
             placeholder="server-name/backup-folder"
           />
+          <TextField
+            margin="dense"
+            label="Rsync Options (optional)"
+            fullWidth
+            value={formData.rsync_options}
+            onChange={(e) => setFormData({ ...formData, rsync_options: e.target.value })}
+            placeholder="-avz --delete"
+          />
           <Box sx={{ mt: 2, mb: 2 }}>
             <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
               Schedule
@@ -604,14 +612,6 @@ export default function BackupJobs() {
               )}
             </Grid>
           </Box>
-          <TextField
-            margin="dense"
-            label="Rsync Options (optional)"
-            fullWidth
-            value={formData.rsync_options}
-            onChange={(e) => setFormData({ ...formData, rsync_options: e.target.value })}
-            placeholder="-avz --delete"
-          />
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 3 }}>
           <Button onClick={handleClose} sx={{ px: 3 }}>
