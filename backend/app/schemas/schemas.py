@@ -132,7 +132,23 @@ class BackupJobBase(BaseModel):
             # Basic cron validation - you can make this more robust
             parts = v.strip().split()
             if len(parts) != 5:
-                raise ValueError('Invalid cron expression. Must have 5 parts: minute hour day month weekday')
+                raise ValueError('Invalid schedule format')
+            # Validate each part is either * or a number/range
+            try:
+                minute, hour, day, month, weekday = parts
+                # Just basic validation that they're valid cron parts
+                if minute != '*':
+                    int(minute)
+                if hour != '*':
+                    int(hour)
+                if day != '*':
+                    int(day)
+                if month != '*':
+                    int(month)
+                if weekday != '*':
+                    int(weekday)
+            except ValueError:
+                raise ValueError('Invalid schedule format')
         return v
 
 

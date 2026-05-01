@@ -18,6 +18,11 @@ import {
   TextField,
   Chip,
   TableSortLabel,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Select,
+  Grid,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -41,6 +46,14 @@ export default function BackupJobs() {
     local_path: '',
     schedule: '',
     rsync_options: '',
+  });
+  
+  const [scheduleConfig, setScheduleConfig] = useState({
+    frequency: 'manual',
+    hour: '2',
+    minute: '0',
+    dayOfWeek: '1',
+    dayOfMonth: '1',
   });
 
   useEffect(() => {
@@ -66,10 +79,90 @@ export default function BackupJobs() {
     }
   };
 
+  const parseCronToConfig = (cronExpression) => {
+    if (!cronExpression || !cronExpression.trim()) {
+      return {
+        frequency: 'manual',
+        hour: '2',
+        minute: '0',
+        dayOfWeek: '1',
+        dayOfMonth: '1',
+      };
+    }
+    
+    const parts = cronExpression.split(' ');
+    if (parts.length !== 5) return { frequency: 'manual', hour: '2', minute: '0', dayOfWeek: '1', dayOfMonth: '1' };
+    
+    const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+    
+    // Daily: 0 2 * * *
+    if (dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+      return { frequency: 'daily', hour, minute, dayOfWeek: '1', dayOfMonth: '1' };
+    }
+    // Weekly: 0 2 * * 1
+    if (dayOfMonth === '*' && month === '*' && dayOfWeek !== '*') {
+      return { frequency: 'weekly', hour, minute, dayOfWeek, dayOfMonth: '1' };
+    }
+    // Monthly: 0 2 1 * *
+    if (dayOfMonth !== '*' && month === '*' && dayOfWeek === '*') {
+      return { frequency: 'monthly', hour, minute, dayOfWeek: '1', dayOfMonth };
+    }
+    
+    return { frequency: 'manual', hour: '2', minute: '0', dayOfWeek: '1', dayOfMonth: '1' };
+  };
+  
+  const buildCronExpression = (config) => {
+    if (config.frequency === 'manual') return '';
+    
+    const { frequency, hour, minute, dayOfWeek, dayOfMonth } = config;
+    
+    if (frequency === 'daily') {
+      return `${minute} ${hour} * * *`;
+    }
+    if (frequency === 'weekly') {
+      return `${minute} ${hour} * * ${dayOfWeek}`;
+    }
+    if (frequency === 'monthly') {
+      return `${minute} ${hour} ${dayOfMonth} * *`;
+    }
+    
+    return '';
+  };
+  
+  const formatSchedule = (cronExpression) => {
+    if (!cronExpression || !cronExpression.trim()) {
+      return 'Manual only';
+    }
+    
+    const parts = cronExpression.split(' ');
+    if (parts.length !== 5) return cronExpression;
+    
+    const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+    const timeStr = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+    
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    
+    // Daily
+    if (dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+      return `Daily at ${timeStr}`;
+    }
+    // Weekly
+    if (dayOfMonth === '*' && month === '*' && dayOfWeek !== '*') {
+      return `Weekly on ${dayNames[parseInt(dayOfWeek)]} at ${timeStr}`;
+    }
+    // Monthly
+    if (dayOfMonth !== '*' && month === '*' && dayOfWeek === '*') {
+      return `Monthly on day ${dayOfMonth} at ${timeStr}`;
+    }
+    
+    return cronExpression;
+  };
+
   const handleOpen = (job = null) => {
     if (job) {
       setEditingJob(job);
       setFormData(job);
+      setScheduleConfig(parseCronToConfig(job.schedule));
     } else {
       setEditingJob(null);
       setFormData({
@@ -79,6 +172,13 @@ export default function BackupJobs() {
         local_path: '',
         schedule: '',
         rsync_options: '',
+      });
+      setScheduleConfig({
+        frequency: 'manual',
+        hour: '2',
+        minute: '0',
+        dayOfWeek: '1',
+        dayOfMonth: '1',
       });
     }
     setOpen(true);
@@ -93,6 +193,7 @@ export default function BackupJobs() {
     try {
       const data = { ...formData };
       data.server_id = parseInt(data.server_id);
+      data.schedule = buildCronExpression(scheduleConfig);
       if (!data.rsync_options) delete data.rsync_options;
       
       if (editingJob) {
@@ -273,7 +374,7 @@ export default function BackupJobs() {
                 }}>
                   {job.remote_path}
                 </TableCell>
-                <TableCell>{job.schedule || 'Manual only'}</TableCell>
+                <TableCell>{formatSchedule(job.schedule)}</TableCell>
                 <TableCell sx={{ fontSize: '0.875rem' }}>
                   {job.last_run ? new Date(job.last_run).toLocaleString() : 'Never'}
                 </TableCell>
@@ -403,15 +504,106 @@ export default function BackupJobs() {
             onChange={(e) => setFormData({ ...formData, local_path: e.target.value })}
             placeholder="server-name/backup-folder"
           />
-          <TextField
-            margin="dense"
-            label="Schedule (cron format)"
-            fullWidth
-            value={formData.schedule}
-            onChange={(e) => setFormData({ ...formData, schedule: e.target.value })}
-            placeholder="0 2 * * * (daily at 2am)"
-            helperText="Leave empty for manual-only backups. Format: minute hour day month weekday"
-          />
+          <Box sx={{ mt: 2, mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+              Schedule
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={12}>
+                <FormControl fullWidth>
+                  <InputLabel>Frequency</InputLabel>
+                  <Select
+                    value={scheduleConfig.frequency}
+                    label="Frequency"
+                    onChange={(e) => setScheduleConfig({ ...scheduleConfig, frequency: e.target.value })}
+                  >
+                    <MenuItem value="manual">Manual Only</MenuItem>
+                    <MenuItem value="daily">Daily</MenuItem>
+                    <MenuItem value="weekly">Weekly</MenuItem>
+                    <MenuItem value="monthly">Monthly</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              {scheduleConfig.frequency !== 'manual' && (
+                <>
+                  <Grid item xs={6}>
+                    <FormControl fullWidth>
+                      <InputLabel>Hour</InputLabel>
+                      <Select
+                        value={scheduleConfig.hour}
+                        label="Hour"
+                        onChange={(e) => setScheduleConfig({ ...scheduleConfig, hour: e.target.value })}
+                      >
+                        {Array.from({ length: 24 }, (_, i) => (
+                          <MenuItem key={i} value={i.toString()}>
+                            {i.toString().padStart(2, '0')}:00
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  
+                  <Grid item xs={6}>
+                    <FormControl fullWidth>
+                      <InputLabel>Minute</InputLabel>
+                      <Select
+                        value={scheduleConfig.minute}
+                        label="Minute"
+                        onChange={(e) => setScheduleConfig({ ...scheduleConfig, minute: e.target.value })}
+                      >
+                        {[0, 15, 30, 45].map((min) => (
+                          <MenuItem key={min} value={min.toString()}>
+                            :{min.toString().padStart(2, '0')}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </>
+              )}
+              
+              {scheduleConfig.frequency === 'weekly' && (
+                <Grid item xs={12}>
+                  <FormControl fullWidth>
+                    <InputLabel>Day of Week</InputLabel>
+                    <Select
+                      value={scheduleConfig.dayOfWeek}
+                      label="Day of Week"
+                      onChange={(e) => setScheduleConfig({ ...scheduleConfig, dayOfWeek: e.target.value })}
+                    >
+                      <MenuItem value="0">Sunday</MenuItem>
+                      <MenuItem value="1">Monday</MenuItem>
+                      <MenuItem value="2">Tuesday</MenuItem>
+                      <MenuItem value="3">Wednesday</MenuItem>
+                      <MenuItem value="4">Thursday</MenuItem>
+                      <MenuItem value="5">Friday</MenuItem>
+                      <MenuItem value="6">Saturday</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+              )}
+              
+              {scheduleConfig.frequency === 'monthly' && (
+                <Grid item xs={12}>
+                  <FormControl fullWidth>
+                    <InputLabel>Day of Month</InputLabel>
+                    <Select
+                      value={scheduleConfig.dayOfMonth}
+                      label="Day of Month"
+                      onChange={(e) => setScheduleConfig({ ...scheduleConfig, dayOfMonth: e.target.value })}
+                    >
+                      {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
+                        <MenuItem key={day} value={day.toString()}>
+                          {day}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+              )}
+            </Grid>
+          </Box>
           <TextField
             margin="dense"
             label="Rsync Options (optional)"
