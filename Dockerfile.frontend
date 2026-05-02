@@ -2,14 +2,11 @@ FROM node:22-alpine as build
 
 WORKDIR /app
 
-# Update npm to latest version
-RUN npm install -g npm@latest
-
 # Copy package files
 COPY frontend/package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies (use install instead of ci for flexibility)
+RUN npm install --legacy-peer-deps
 
 # Copy source code
 COPY frontend/ .
