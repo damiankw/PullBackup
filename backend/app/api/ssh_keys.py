@@ -16,8 +16,15 @@ def list_ssh_keys(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """List all SSH keys for current user."""
-    keys = db.query(SSHKey).filter(SSHKey.owner_id == current_user.id).all()
+    """List SSH keys visible to current user (owned keys + public keys)."""
+    from sqlalchemy import or_
+    
+    keys = db.query(SSHKey).filter(
+        or_(
+            SSHKey.owner_id == current_user.id,  # User's own keys
+            SSHKey.is_public == True  # Public keys from any user
+        )
+    ).all()
     return keys
 
 
@@ -44,6 +51,7 @@ def create_ssh_key(
             name=key_data.name,
             fingerprint=fingerprint,
             key_file_path=key_file_path,
+            is_public=key_data.is_public,
             owner_id=current_user.id
         )
         
@@ -73,10 +81,15 @@ def get_ssh_key(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Get SSH key by ID."""
+    """Get SSH key by ID (if owned by user or is public)."""
+    from sqlalchemy import or_
+    
     key = db.query(SSHKey).filter(
         SSHKey.id == key_id,
-        SSHKey.owner_id == current_user.id
+        or_(
+            SSHKey.owner_id == current_user.id,
+            SSHKey.is_public == True
+        )
     ).first()
     
     if not key:

@@ -17,12 +17,18 @@ import {
   DialogActions,
   TextField,
   TableSortLabel,
+  Chip,
+  FormControlLabel,
+  Checkbox,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
+  Public as PublicIcon,
+  Lock as LockIcon,
 } from '@mui/icons-material';
 import api from '../api';
+import { useAuth } from '../AuthContext';
 
 export default function SSHKeys() {
   const [keys, setKeys] = useState([]);
@@ -32,7 +38,9 @@ export default function SSHKeys() {
   const [formData, setFormData] = useState({
     name: '',
     private_key: '',
+    is_public: false,
   });
+  const { user } = useAuth();
 
   useEffect(() => {
     fetchKeys();
@@ -48,7 +56,7 @@ export default function SSHKeys() {
   };
 
   const handleOpen = () => {
-    setFormData({ name: '', private_key: '' });
+    setFormData({ name: '', private_key: '', is_public: false });
     setOpen(true);
   };
 
@@ -125,6 +133,7 @@ export default function SSHKeys() {
                   Name
                 </TableSortLabel>
               </TableCell>
+              <TableCell>Visibility</TableCell>
               <TableCell>
                 <TableSortLabel
                   active={orderBy === 'fingerprint'}
@@ -150,14 +159,39 @@ export default function SSHKeys() {
             {sortedKeys.map((key) => (
               <TableRow key={key.id}>
                 <TableCell>{key.name}</TableCell>
+                <TableCell>
+                  {key.is_public ? (
+                    <Chip 
+                      icon={<PublicIcon />} 
+                      label="Public" 
+                      size="small" 
+                      color="primary"
+                      variant="outlined"
+                    />
+                  ) : (
+                    <Chip 
+                      icon={<LockIcon />} 
+                      label="Private" 
+                      size="small" 
+                      variant="outlined"
+                    />
+                  )}
+                  {key.owner_id !== user?.id && (
+                    <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                      (Shared)
+                    </Typography>
+                  )}
+                </TableCell>
                 <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
                   {key.fingerprint || 'N/A'}
                 </TableCell>
                 <TableCell>{new Date(key.created_at).toLocaleString()}</TableCell>
                 <TableCell>
-                  <IconButton size="small" onClick={() => handleDelete(key.id)}>
-                    <DeleteIcon />
-                  </IconButton>
+                  {key.owner_id === user?.id && (
+                    <IconButton size="small" onClick={() => handleDelete(key.id)}>
+                      <DeleteIcon />
+                    </IconButton>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
@@ -189,9 +223,27 @@ export default function SSHKeys() {
               style: { fontFamily: 'monospace', fontSize: '0.85rem' }
             }}
           />
-          <Typography variant="caption" color="textSecondary">
+          <Typography variant="caption" color="textSecondary" display="block" gutterBottom>
             Paste your SSH private key. Supported formats: RSA, OpenSSH, EC (Ed25519), DSA, and PKCS#8
           </Typography>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={formData.is_public}
+                onChange={(e) => setFormData({ ...formData, is_public: e.target.checked })}
+                color="primary"
+              />
+            }
+            label={
+              <Box>
+                <Typography variant="body2">Make this key public</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Public keys can be viewed and used by all users. Private keys are only visible to you.
+                </Typography>
+              </Box>
+            }
+            sx={{ mt: 2 }}
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClose}>Cancel</Button>

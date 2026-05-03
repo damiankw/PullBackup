@@ -26,5 +26,5 @@ RUN mkdir -p /app/data /app/ssh_keys /backups && \
 # Expose port
 EXPOSE 8000
 
-# Run migration, initialize database, and start application
-CMD ["sh", "-c", "python migrate_remove_local_path.py && python init_db.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# Run migrations, initialize database, and start application
+CMD ["sh", "-c", "python migrate_remove_local_path.py && python migrate_add_ssh_key_public.py && python init_db.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

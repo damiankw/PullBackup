@@ -65,6 +65,7 @@ class LoginRequest(BaseModel):
 # SSH Key Schemas
 class SSHKeyBase(BaseModel):
     name: str
+    is_public: bool = False
 
 
 class SSHKeyCreate(SSHKeyBase):
