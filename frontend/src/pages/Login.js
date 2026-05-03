@@ -29,6 +29,12 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Prevent double submission
+    if (loading) {
+      return;
+    }
+    
     setError('');
     setLoading(true);
 
