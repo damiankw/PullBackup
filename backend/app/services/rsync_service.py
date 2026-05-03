@@ -291,7 +291,7 @@ class RsyncService:
                 line = line.strip()
                 
                 # Look for "Total transferred file size: X bytes"
-                # This is the actual uncompressed size of files transferred
+                # This is the actual size of files that were transferred (0 when using hardlinks)
                 if 'total transferred file size:' in line.lower():
                     parts = line.split(':')
                     if len(parts) >= 2:
@@ -302,8 +302,8 @@ class RsyncService:
                         except (ValueError, IndexError):
                             pass
                 
-                # Look for "Number of regular files transferred: X"
-                elif 'number of regular files transferred:' in line.lower():
+                # Look for "Number of files transferred: X" (rsync 3.x format)
+                elif 'number of files transferred:' in line.lower():
                     parts = line.split(':')
                     if len(parts) >= 2:
                         try:
@@ -311,16 +311,14 @@ class RsyncService:
                         except (ValueError, IndexError):
                             pass
                 
-                # Fallback: Look for "total size is X" at the end
-                elif stats['bytes_transferred'] == 0 and 'total size is' in line.lower():
-                    parts = line.split()
-                    for i, part in enumerate(parts):
-                        if part == 'is' and i + 1 < len(parts):
-                            try:
-                                stats['bytes_transferred'] = int(parts[i + 1].replace(',', ''))
-                                break
-                            except (ValueError, IndexError):
-                                pass
+                # Also look for "Number of regular files transferred: X" (older format)
+                elif 'number of regular files transferred:' in line.lower():
+                    parts = line.split(':')
+                    if len(parts) >= 2:
+                        try:
+                            stats['files_transferred'] = int(parts[1].strip().replace(',', ''))
+                        except (ValueError, IndexError):
+                            pass
                     
         except Exception:
             pass
@@ -337,31 +335,47 @@ class RsyncService:
             - space_saved_bytes: Space saved by hardlinks
         """
         try:
+            import platform
+            is_macos = platform.system() == 'Darwin'
+            
             # Get actual disk usage (space used on disk, respects hardlinks)
             result_actual = subprocess.run(
-                ['du', '-sb', str(snapshot_dir)],
+                ['du', '-sk', str(snapshot_dir)],
                 capture_output=True,
                 text=True,
                 timeout=30
             )
             
             # Get apparent size (logical size of all files, ignores hardlinks)
-            result_apparent = subprocess.run(
-                ['du', '-sb', '--apparent-size', str(snapshot_dir)],
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
+            # macOS uses -A flag, Linux uses --apparent-size
+            if is_macos:
+                result_apparent = subprocess.run(
+                    ['du', '-Ak', str(snapshot_dir)],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+            else:
+                result_apparent = subprocess.run(
+                    ['du', '-sk', '--apparent-size', str(snapshot_dir)],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
             
-            actual_bytes = 0
-            apparent_bytes = 0
+            actual_kb = 0
+            apparent_kb = 0
             
             if result_actual.returncode == 0:
                 # Parse output: "12345\t/path/to/snapshot"
-                actual_bytes = int(result_actual.stdout.split()[0])
+                actual_kb = int(result_actual.stdout.split()[0])
             
             if result_apparent.returncode == 0:
-                apparent_bytes = int(result_apparent.stdout.split()[0])
+                apparent_kb = int(result_apparent.stdout.split()[0])
+            
+            # Convert KB to bytes
+            actual_bytes = actual_kb * 1024
+            apparent_bytes = apparent_kb * 1024
             
             space_saved = apparent_bytes - actual_bytes if apparent_bytes > actual_bytes else 0
             

@@ -65,7 +65,7 @@ export default function BackupHistory() {
   };
 
   const formatBytes = (bytes) => {
-    if (bytes === 0) return '0 B';
+    if (!bytes || bytes === 0) return '0 B';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -225,9 +225,9 @@ export default function BackupHistory() {
                 <TableCell>{formatBytes(entry.bytes_transferred)}</TableCell>
                 <TableCell>
                   <Tooltip title={
-                    entry.space_saved_bytes > 0 
+                    entry.space_saved_bytes > 0 && entry.snapshot_total_size_bytes > 0
                       ? `Logical: ${formatBytes(entry.snapshot_total_size_bytes)} | Saved: ${formatBytes(entry.space_saved_bytes)} (${((entry.space_saved_bytes / entry.snapshot_total_size_bytes) * 100).toFixed(1)}%)`
-                      : 'First snapshot (full backup)'
+                      : entry.snapshot_size_bytes > 0 ? 'First snapshot (full backup)' : 'No size data available'
                   }>
                     <span>{formatBytes(entry.snapshot_size_bytes)}</span>
                   </Tooltip>
