@@ -254,3 +254,51 @@ class Stats(BaseModel):
     successful_backups: int
     failed_backups: int
     running_backups: int
+
+
+# Email Settings Schemas
+class EmailSettingsBase(BaseModel):
+    smtp_host: str
+    smtp_port: int = 587
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_use_tls: bool = True
+    smtp_use_ssl: bool = False
+    from_email: str
+    from_name: Optional[str] = None
+    notify_on_success: bool = False
+    notify_on_failure: bool = True
+    notify_recipients: Optional[str] = None  # Comma-separated emails
+    is_enabled: bool = False
+
+
+class EmailSettingsCreate(EmailSettingsBase):
+    pass
+
+
+class EmailSettingsUpdate(BaseModel):
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_use_tls: Optional[bool] = None
+    smtp_use_ssl: Optional[bool] = None
+    from_email: Optional[str] = None
+    from_name: Optional[str] = None
+    notify_on_success: Optional[bool] = None
+    notify_on_failure: Optional[bool] = None
+    notify_recipients: Optional[str] = None
+    is_enabled: Optional[bool] = None
+
+
+class EmailSettings(EmailSettingsBase):
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class EmailTestRequest(BaseModel):
+    recipient: str

@@ -50,8 +50,9 @@ export const AuthProvider = ({ children }) => {
       return response.data;
     } catch (error) {
       console.error('[AuthContext] Login error:', error);
-      setLoading(false);
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 

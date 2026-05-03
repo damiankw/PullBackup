@@ -12,6 +12,7 @@ from app.schemas.schemas import (
 )
 from app.services.scheduler import backup_scheduler
 from app.services.rsync_service import rsync_service
+from app.services.email_service import EmailService
 
 router = APIRouter()
 
@@ -322,6 +323,13 @@ def execute_backup(job_id: int, history_id: int):
         job.last_run = datetime.now()
         
         db.commit()
+        
+        # Send email notification
+        try:
+            email_service = EmailService(db)
+            email_service.send_backup_notification(history)
+        except Exception as email_error:
+            print(f"Failed to send email notification: {email_error}")
         
     except Exception as e:
         if history:

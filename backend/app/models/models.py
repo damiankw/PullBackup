@@ -118,3 +118,23 @@ class BackupHistory(Base):
     
     # Relationships
     backup_job = relationship("BackupJob", back_populates="history")
+
+
+class EmailSettings(Base):
+    __tablename__ = "email_settings"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    smtp_host = Column(String(255), nullable=False)
+    smtp_port = Column(Integer, default=587, nullable=False)
+    smtp_username = Column(String(255), nullable=True)
+    smtp_password = Column(String(255), nullable=True)
+    smtp_use_tls = Column(Boolean, default=True, nullable=False)
+    smtp_use_ssl = Column(Boolean, default=False, nullable=False)
+    from_email = Column(String(255), nullable=False)
+    from_name = Column(String(255), nullable=True)
+    notify_on_success = Column(Boolean, default=False, nullable=False)
+    notify_on_failure = Column(Boolean, default=True, nullable=False)
+    notify_recipients = Column(Text, nullable=True)  # Comma-separated email addresses
+    is_enabled = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())

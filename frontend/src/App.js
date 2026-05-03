@@ -12,7 +12,7 @@ import SSHKeys from './pages/SSHKeys';
 import BackupJobs from './pages/BackupJobs';
 import BackupHistory from './pages/BackupHistory';
 import BrowseBackups from './pages/BrowseBackups';
-import Users from './pages/Users';
+import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import Layout from './components/Layout';
 
@@ -208,7 +208,7 @@ function App() {
               <Route path="backup-jobs" element={<BackupJobs />} />
               <Route path="backup-history" element={<BackupHistory />} />
               <Route path="browse" element={<BrowseBackups />} />
-              <Route path="users" element={<Users />} />
+              <Route path="settings" element={<Settings />} />
               <Route path="profile" element={<Profile />} />
             </Route>
           </Routes>

@@ -179,9 +179,14 @@ export default function Users() {
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" sx={{ fontWeight: 700 }}>
-          User Management
-        </Typography>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 600, mb: 0.5 }}>
+            User Management
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Manage user accounts and permissions
+          </Typography>
+        </Box>
         <Button
           variant="contained"
           startIcon={<AddIcon />}

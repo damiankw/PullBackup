@@ -13,6 +13,9 @@ import {
   Toolbar,
   Typography,
   Divider,
+  Menu,
+  MenuItem,
+  Avatar,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -23,9 +26,10 @@ import {
   History as HistoryIcon,
   Logout as LogoutIcon,
   CloudSync as CloudSyncIcon,
-  People as PeopleIcon,
+  Settings as SettingsIcon,
   Person as PersonIcon,
   FolderOpen as FolderOpenIcon,
+  KeyboardArrowUp as KeyboardArrowUpIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../AuthContext';
 
@@ -33,17 +37,17 @@ const drawerWidth = 280;
 
 const menuItems = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
-  { text: 'Servers', icon: <StorageIcon />, path: '/servers' },
   { text: 'SSH Keys', icon: <VpnKeyIcon />, path: '/ssh-keys' },
+  { text: 'Servers', icon: <StorageIcon />, path: '/servers' },
   { text: 'Backup Jobs', icon: <BackupIcon />, path: '/backup-jobs' },
   { text: 'History', icon: <HistoryIcon />, path: '/backup-history' },
   { text: 'Browse Backups', icon: <FolderOpenIcon />, path: '/browse' },
-  { text: 'Users', icon: <PeopleIcon />, path: '/users', adminOnly: true },
-  { text: 'Profile', icon: <PersonIcon />, path: '/profile' },
+  { text: 'Settings', icon: <SettingsIcon />, path: '/settings', adminOnly: true },
 ];
 
 export default function Layout() {
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [anchorEl, setAnchorEl] = React.useState(null);
   const navigate = useNavigate();
   const location = useLocation();
   const { logout, user } = useAuth();
@@ -52,7 +56,21 @@ export default function Layout() {
     setMobileOpen(!mobileOpen);
   };
 
+  const handleUserMenuClick = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleUserMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleProfile = () => {
+    handleUserMenuClose();
+    navigate('/profile');
+  };
+
   const handleLogout = () => {
+    handleUserMenuClose();
     logout();
     navigate('/login');
   };
@@ -145,21 +163,72 @@ export default function Layout() {
       <Box sx={{ p: 2 }}>
         <ListItem disablePadding>
           <ListItemButton 
-            onClick={handleLogout}
+            onClick={handleUserMenuClick}
             sx={{
               borderRadius: 2,
               py: 1.5,
               '&:hover': {
-                background: 'rgba(239, 68, 68, 0.1)',
+                background: 'rgba(20, 184, 166, 0.1)',
               },
             }}
           >
             <ListItemIcon sx={{ minWidth: 40 }}>
-              <LogoutIcon />
+              <Avatar 
+                sx={{ 
+                  width: 32, 
+                  height: 32, 
+                  background: '#14b8a6',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                }}
+              >
+                {user?.username?.charAt(0).toUpperCase()}
+              </Avatar>
             </ListItemIcon>
-            <ListItemText primary="Logout" />
+            <ListItemText 
+              primary={user?.username}
+              secondary={user?.role}
+              primaryTypographyProps={{ fontWeight: 600 }}
+              secondaryTypographyProps={{ fontSize: '0.75rem' }}
+            />
+            <KeyboardArrowUpIcon sx={{ ml: 1, opacity: 0.6 }} />
           </ListItemButton>
         </ListItem>
+        <Menu
+          anchorEl={anchorEl}
+          open={Boolean(anchorEl)}
+          onClose={handleUserMenuClose}
+          anchorOrigin={{
+            vertical: 'top',
+            horizontal: 'center',
+          }}
+          transformOrigin={{
+            vertical: 'bottom',
+            horizontal: 'center',
+          }}
+          PaperProps={{
+            sx: {
+              mt: -1,
+              minWidth: 200,
+              background: 'rgba(30, 41, 59, 0.95)',
+              backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(148, 163, 184, 0.1)',
+            },
+          }}
+        >
+          <MenuItem onClick={handleProfile} sx={{ py: 1.5 }}>
+            <ListItemIcon sx={{ minWidth: 36 }}>
+              <PersonIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Profile</ListItemText>
+          </MenuItem>
+          <MenuItem onClick={handleLogout} sx={{ py: 1.5, color: '#ef4444' }}>
+            <ListItemIcon sx={{ minWidth: 36 }}>
+              <LogoutIcon fontSize="small" sx={{ color: '#ef4444' }} />
+            </ListItemIcon>
+            <ListItemText>Logout</ListItemText>
+          </MenuItem>
+        </Menu>
       </Box>
     </Box>
   );
