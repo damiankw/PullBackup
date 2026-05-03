@@ -46,7 +46,6 @@ export default function BackupJobs() {
     name: '',
     server_id: '',
     remote_path: '',
-    local_path: '',
     schedule: '',
     rsync_options: '',
   });
@@ -174,7 +173,6 @@ export default function BackupJobs() {
         name: '',
         server_id: '',
         remote_path: '',
-        local_path: '',
         schedule: '',
         rsync_options: '',
       });
@@ -528,14 +526,6 @@ export default function BackupJobs() {
             value={formData.remote_path}
             onChange={(e) => setFormData({ ...formData, remote_path: e.target.value })}
             placeholder="/path/on/remote/server"
-          />
-          <TextField
-            margin="dense"
-            label="Local Path"
-            fullWidth
-            value={formData.local_path}
-            onChange={(e) => setFormData({ ...formData, local_path: e.target.value })}
-            placeholder="server-name/backup-folder"
           />
           <TextField
             margin="dense"

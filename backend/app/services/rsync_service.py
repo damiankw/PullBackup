@@ -104,11 +104,9 @@ class RsyncService:
         port: int,
         username: str,
         remote_path: str,
-        local_path: str,
         ssh_key_path: Optional[str] = None,
         rsync_options: Optional[str] = None,
         callback=None,
-        job_id: Optional[int] = None,
         backup_uuid: Optional[str] = None,
         job_name: Optional[str] = None,
         server_name: Optional[str] = None
@@ -122,12 +120,10 @@ class RsyncService:
             port: SSH port
             username: SSH username
             remote_path: Path on remote server
-            local_path: Local destination path (DEPRECATED - use backup_uuid)
             ssh_key_path: Path to SSH private key
             rsync_options: Custom rsync options
             callback: Optional callback function for progress updates
-            job_id: Backup job ID (DEPRECATED - use backup_uuid)
-            backup_uuid: Backup job UUID (preferred)
+            backup_uuid: Backup job UUID
             job_name: Job name for README
             server_name: Server name for README
         
@@ -136,12 +132,10 @@ class RsyncService:
         """
         try:
             # Create base backup directory for this job using UUID
-            if backup_uuid:
-                base_backup_dir = self.backup_root / backup_uuid
-            elif job_id is not None:
-                base_backup_dir = self.backup_root / f"job-{job_id}"
-            else:
-                base_backup_dir = self.backup_root / local_path.lstrip('/')
+            if not backup_uuid:
+                raise ValueError("backup_uuid is required")
+            
+            base_backup_dir = self.backup_root / backup_uuid
             base_backup_dir.mkdir(parents=True, exist_ok=True)
             
             # Find previous snapshot for hardlinking BEFORE creating new snapshot
@@ -463,25 +457,20 @@ class RsyncService:
         except Exception:
             return None
     
-    def list_snapshots(self, local_path: str = None, job_id: int = None, backup_uuid: str = None) -> list:
+    def list_snapshots(self, backup_uuid: str) -> list:
         """
         List all snapshots for a given backup job.
         
         Args:
-            local_path: Base backup path (DEPRECATED, use backup_uuid)
-            job_id: Backup job ID (DEPRECATED, use backup_uuid)
-            backup_uuid: Backup job UUID (preferred)
+            backup_uuid: Backup job UUID
             
         Returns:
             List of snapshot info dictionaries
         """
-        # Use backup_uuid for path if provided
-        if backup_uuid:
-            base_backup_dir = self.backup_root / backup_uuid
-        elif job_id is not None:
-            base_backup_dir = self.backup_root / f"job-{job_id}"
-        else:
-            base_backup_dir = self.backup_root / local_path.lstrip('/')
+        if not backup_uuid:
+            raise ValueError("backup_uuid is required")
+        
+        base_backup_dir = self.backup_root / backup_uuid
         
         if not base_backup_dir.exists():
             return []
@@ -523,28 +512,24 @@ class RsyncService:
             'total_space_saved_bytes': total_logical_size - total_actual_size if total_logical_size > total_actual_size else 0,
         }
     
-    def delete_snapshot(self, local_path: str = None, snapshot_name: str = None, job_id: int = None, backup_uuid: str = None) -> Tuple[bool, str]:
+    def delete_snapshot(self, snapshot_name: str, backup_uuid: str) -> Tuple[bool, str]:
         """
         Delete a specific snapshot.
         
         Args:
-            local_path: Base backup path (DEPRECATED, use backup_uuid)
             snapshot_name: Name of snapshot directory to delete
-            job_id: Backup job ID (DEPRECATED, use backup_uuid)
-            backup_uuid: Backup job UUID (preferred)
+            backup_uuid: Backup job UUID
             
         Returns:
             Tuple of (success, message)
         """
         try:
             import shutil
-            # Use backup_uuid for path if provided
-            if backup_uuid:
-                base_backup_dir = self.backup_root / backup_uuid
-            elif job_id is not None:
-                base_backup_dir = self.backup_root / f"job-{job_id}"
-            else:
-                base_backup_dir = self.backup_root / local_path.lstrip('/')
+            
+            if not backup_uuid:
+                raise ValueError("backup_uuid is required")
+            
+            base_backup_dir = self.backup_root / backup_uuid
             snapshot_dir = base_backup_dir / snapshot_name
             
             if not snapshot_dir.exists():

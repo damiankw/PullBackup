@@ -123,9 +123,11 @@ class BackupScheduler:
                 port=server.port,
                 username=server.username,
                 remote_path=backup_job.remote_path,
-                local_path=backup_job.local_path,
                 ssh_key_path=ssh_key_path,
-                rsync_options=backup_job.rsync_options
+                rsync_options=backup_job.rsync_options,
+                backup_uuid=backup_job.backup_uuid,
+                job_name=backup_job.name,
+                server_name=server.name
             )
             
             # Update history

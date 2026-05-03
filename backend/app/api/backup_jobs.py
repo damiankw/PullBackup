@@ -284,10 +284,8 @@ def execute_backup(job_id: int, history_id: int):
             port=server.port,
             username=server.username,
             remote_path=job.remote_path,
-            local_path=job.local_path,
             ssh_key_path=ssh_key_path,
             rsync_options=job.rsync_options,
-            job_id=job_id,
             backup_uuid=job.backup_uuid,
             job_name=job.name,
             server_name=server.name

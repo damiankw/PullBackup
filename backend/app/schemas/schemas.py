@@ -123,7 +123,6 @@ class BackupJobBase(BaseModel):
     name: str
     server_id: int
     remote_path: str
-    local_path: str
     schedule: Optional[str] = None
     rsync_options: Optional[str] = None
     
@@ -161,7 +160,6 @@ class BackupJobUpdate(BaseModel):
     name: Optional[str] = None
     server_id: Optional[int] = None
     remote_path: Optional[str] = None
-    local_path: Optional[str] = None
     schedule: Optional[str] = None
     rsync_options: Optional[str] = None
     is_active: Optional[bool] = None

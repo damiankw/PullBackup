@@ -82,7 +82,6 @@ class BackupJob(Base):
     name = Column(String(100), nullable=False)
     server_id = Column(Integer, ForeignKey("servers.id"), nullable=False)
     remote_path = Column(String(500), nullable=False)
-    local_path = Column(String(500), nullable=False)
     schedule = Column(String(100), nullable=True)  # Cron expression
     rsync_options = Column(String(500), nullable=True)
     is_active = Column(Boolean, default=True)
