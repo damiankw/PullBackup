@@ -621,7 +621,7 @@ class RsyncService:
 ## Backup Configuration
 
 - **Schedule**: {schedule or 'Manual only'}
-- **rsync Options**: `{rsync_options or 'Default (-avz)'}`
+- **rsync Options**: `{rsync_options or 'Default (-avz --no-owner --no-group)'}`
 - **Backup Strategy**: Incremental snapshots with hardlinks
 
 ## Available Snapshots

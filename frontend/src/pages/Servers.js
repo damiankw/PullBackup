@@ -41,6 +41,7 @@ export default function Servers() {
   const [orderBy, setOrderBy] = useState('name');
   const [order, setOrder] = useState('asc');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+  const [testingServerId, setTestingServerId] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     hostname: '',
@@ -129,12 +130,17 @@ export default function Servers() {
   };
 
   const handleTestConnection = async (server) => {
+    setTestingServerId(server.id);
     try {
       await api.post(`/servers/${server.id}/test-connection`);
       fetchServers();
+      setSnackbar({ open: true, message: 'Connection test successful', severity: 'success' });
     } catch (error) {
       console.error('Connection test failed:', error);
       fetchServers();
+      setSnackbar({ open: true, message: error.response?.data?.detail || 'Connection test failed', severity: 'error' });
+    } finally {
+      setTestingServerId(null);
     }
   };
 
@@ -231,18 +237,28 @@ export default function Servers() {
                 <TableCell>{server.port}</TableCell>
                 <TableCell>{server.username}</TableCell>
                 <TableCell>
-                  {server.connection_test_success === true && (
-                    <Chip label="Connected" color="success" size="small" />
-                  )}
-                  {server.connection_test_success === false && (
-                    <Chip label="Failed" color="error" size="small" />
-                  )}
-                  {server.connection_test_success === null && (
-                    <Chip label="Not Tested" size="small" />
+                  {testingServerId === server.id ? (
+                    <Chip label="Testing..." color="info" size="small" />
+                  ) : (
+                    <>
+                      {server.connection_test_success === true && (
+                        <Chip label="Connected" color="success" size="small" />
+                      )}
+                      {server.connection_test_success === false && (
+                        <Chip label="Failed" color="error" size="small" />
+                      )}
+                      {server.connection_test_success === null && (
+                        <Chip label="Not Tested" size="small" />
+                      )}
+                    </>
                   )}
                 </TableCell>
                 <TableCell>
-                  <IconButton size="small" onClick={() => handleTestConnection(server)}>
+                  <IconButton 
+                    size="small" 
+                    onClick={() => handleTestConnection(server)}
+                    disabled={testingServerId === server.id}
+                  >
                     <CheckCircleIcon />
                   </IconButton>
                   <IconButton size="small" onClick={() => handleOpen(server)}>

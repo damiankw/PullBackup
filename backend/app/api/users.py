@@ -6,7 +6,7 @@ from app.core.database import get_db
 from app.api.deps import get_current_active_user
 from app.core.security import get_password_hash, verify_password
 from app.models.models import User, UserRole
-from app.schemas.schemas import User as UserSchema, UserUpdate
+from app.schemas.schemas import User as UserSchema, UserCreate, UserUpdate
 
 router = APIRouter()
 
@@ -27,6 +27,49 @@ def list_users(
     
     users = db.query(User).offset(skip).limit(limit).all()
     return users
+
+
+@router.post("/", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
+def create_user(
+    user_data: UserCreate,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new user. Admin only."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can create users"
+        )
+    
+    # Check if username exists
+    if db.query(User).filter(User.username == user_data.username).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already registered"
+        )
+    
+    # Check if email exists
+    if db.query(User).filter(User.email == user_data.email).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    # Create new user
+    hashed_password = get_password_hash(user_data.password)
+    new_user = User(
+        username=user_data.username,
+        email=user_data.email,
+        hashed_password=hashed_password,
+        role=user_data.role
+    )
+    
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    return new_user
 
 
 @router.get("/me", response_model=UserSchema)

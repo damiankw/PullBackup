@@ -21,6 +21,8 @@ import {
   Switch,
   FormControlLabel,
   TableSortLabel,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -35,8 +37,11 @@ export default function Users() {
   const [editingUser, setEditingUser] = useState(null);
   const [orderBy, setOrderBy] = useState('username');
   const [order, setOrder] = useState('asc');
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const [formData, setFormData] = useState({
+    username: '',
     email: '',
+    password: '',
     role: 'user',
     is_active: true,
   });
@@ -58,14 +63,18 @@ export default function Users() {
     if (user) {
       setEditingUser(user);
       setFormData({
+        username: user.username,
         email: user.email,
+        password: '',
         role: user.role,
         is_active: user.is_active,
       });
     } else {
       setEditingUser(null);
       setFormData({
+        username: '',
         email: '',
+        password: '',
         role: 'user',
         is_active: true,
       });
@@ -77,7 +86,9 @@ export default function Users() {
     setOpen(false);
     setEditingUser(null);
     setFormData({
+      username: '',
       email: '',
+      password: '',
       role: 'user',
       is_active: true,
     });
@@ -86,13 +97,35 @@ export default function Users() {
   const handleSubmit = async () => {
     try {
       if (editingUser) {
-        await api.patch(`/users/${editingUser.id}`, formData);
+        // For editing, only send fields that can be updated
+        const updateData = {
+          email: formData.email,
+          role: formData.role,
+          is_active: formData.is_active,
+        };
+        // Only include password if it's been changed
+        if (formData.password) {
+          updateData.password = formData.password;
+        }
+        await api.patch(`/users/${editingUser.id}`, updateData);
+      } else {
+        // For creating, send all fields
+        await api.post('/users/', formData);
       }
       handleClose();
       fetchUsers();
+      setSnackbar({ 
+        open: true, 
+        message: editingUser ? 'User updated successfully' : 'User created successfully', 
+        severity: 'success' 
+      });
     } catch (error) {
       console.error('Failed to save user:', error);
-      alert(error.response?.data?.detail || 'Failed to save user');
+      setSnackbar({ 
+        open: true, 
+        message: error.response?.data?.detail || 'Failed to save user', 
+        severity: 'error' 
+      });
     }
   };
 
@@ -101,9 +134,18 @@ export default function Users() {
       try {
         await api.delete(`/users/${userId}`);
         fetchUsers();
+        setSnackbar({ 
+          open: true, 
+          message: 'User deleted successfully', 
+          severity: 'success' 
+        });
       } catch (error) {
         console.error('Failed to delete user:', error);
-        alert(error.response?.data?.detail || 'Failed to delete user');
+        setSnackbar({ 
+          open: true, 
+          message: error.response?.data?.detail || 'Failed to delete user', 
+          severity: 'error' 
+        });
       }
     }
   };
@@ -139,6 +181,19 @@ export default function Users() {
         <Typography variant="h4" sx={{ fontWeight: 700 }}>
           User Management
         </Typography>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => handleOpen()}
+          sx={{
+            background: '#14b8a6',
+            '&:hover': {
+              background: '#0d9488',
+            },
+          }}
+        >
+          Add User
+        </Button>
       </Box>
 
       <TableContainer 
@@ -284,10 +339,29 @@ export default function Users() {
         <DialogContent>
           <TextField
             fullWidth
+            label="Username"
+            value={formData.username}
+            onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+            margin="normal"
+            disabled={!!editingUser}
+            helperText={editingUser ? "Username cannot be changed" : ""}
+          />
+          <TextField
+            fullWidth
             label="Email"
+            type="email"
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
             margin="normal"
+          />
+          <TextField
+            fullWidth
+            label={editingUser ? "New Password (leave blank to keep current)" : "Password"}
+            type="password"
+            value={formData.password}
+            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+            margin="normal"
+            required={!editingUser}
           />
           <TextField
             fullWidth
@@ -326,6 +400,21 @@ export default function Users() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar 
+        open={snackbar.open} 
+        autoHideDuration={6000} 
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert 
+          onClose={() => setSnackbar({ ...snackbar, open: false })} 
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
