@@ -184,13 +184,13 @@ export default function SSHKeys() {
             rows={8}
             value={formData.private_key}
             onChange={(e) => setFormData({ ...formData, private_key: e.target.value })}
-            placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;...&#10;-----END RSA PRIVATE KEY-----"
+            placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----"
             InputProps={{
               style: { fontFamily: 'monospace', fontSize: '0.85rem' }
             }}
           />
           <Typography variant="caption" color="textSecondary">
-            Paste your SSH private key (RSA, Ed25519, etc.)
+            Paste your SSH private key. Supported formats: RSA, OpenSSH, EC (Ed25519), DSA, and PKCS#8
           </Typography>
         </DialogContent>
         <DialogActions>

@@ -53,7 +53,14 @@ def create_ssh_key(
         
         return ssh_key
         
+    except ValueError as e:
+        # Validation errors (e.g., invalid key format)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     except Exception as e:
+        # Other errors
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to save SSH key: {str(e)}"

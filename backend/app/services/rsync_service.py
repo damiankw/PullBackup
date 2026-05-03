@@ -396,10 +396,33 @@ class RsyncService:
     def save_ssh_key(self, key_name: str, private_key_content: str, owner_id: int) -> str:
         """
         Save SSH private key to disk.
+        Supports RSA, OpenSSH, EC, and DSA key formats.
         
         Returns:
             Path to saved key file
+        
+        Raises:
+            ValueError: If the key format is not recognized
         """
+        # Validate key format by checking for supported headers
+        supported_formats = [
+            '-----BEGIN RSA PRIVATE KEY-----',
+            '-----BEGIN OPENSSH PRIVATE KEY-----',
+            '-----BEGIN EC PRIVATE KEY-----',
+            '-----BEGIN DSA PRIVATE KEY-----',
+            '-----BEGIN PRIVATE KEY-----',  # PKCS#8 format
+        ]
+        
+        key_content_stripped = private_key_content.strip()
+        is_valid = any(header in key_content_stripped for header in supported_formats)
+        
+        if not is_valid:
+            raise ValueError(
+                "Invalid SSH key format. Supported formats: RSA, OpenSSH, EC, DSA, and PKCS#8. "
+                "Key must start with a valid PEM header like '-----BEGIN RSA PRIVATE KEY-----' "
+                "or '-----BEGIN OPENSSH PRIVATE KEY-----'"
+            )
+        
         # Create user-specific directory
         user_keys_dir = self.ssh_keys_dir / f"user_{owner_id}"
         user_keys_dir.mkdir(parents=True, exist_ok=True)
@@ -408,8 +431,8 @@ class RsyncService:
         safe_name = "".join(c for c in key_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
         key_file = user_keys_dir / f"{safe_name}.pem"
         
-        # Write key file
-        key_file.write_text(private_key_content)
+        # Write key file with proper line endings
+        key_file.write_text(key_content_stripped + '\n')
         os.chmod(key_file, 0o600)
         
         return str(key_file)
