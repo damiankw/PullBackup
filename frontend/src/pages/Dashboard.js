@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Grid,
@@ -18,6 +19,7 @@ import {
 import api from '../api';
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [recentFailures, setRecentFailures] = useState([]);
@@ -284,7 +286,9 @@ export default function Dashboard() {
               Quick Actions
             </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Box sx={{
+              <Box 
+                onClick={() => navigate('/servers')}
+                sx={{
                 p: 2,
                 borderRadius: 2,
                 background: 'rgba(20, 184, 166, 0.1)',
@@ -303,7 +307,9 @@ export default function Dashboard() {
                   Configure a new backup source
                 </Typography>
               </Box>
-              <Box sx={{
+              <Box 
+                onClick={() => navigate('/backup-jobs')}
+                sx={{
                 p: 2,
                 borderRadius: 2,
                 background: 'rgba(16, 185, 129, 0.1)',
@@ -322,7 +328,9 @@ export default function Dashboard() {
                   Set up automated backups
                 </Typography>
               </Box>
-              <Box sx={{
+              <Box 
+                onClick={() => navigate('/backup-history')}
+                sx={{
                 p: 2,
                 borderRadius: 2,
                 background: 'rgba(245, 158, 11, 0.1)',

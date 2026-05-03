@@ -18,6 +18,10 @@ import {
   IconButton,
   TableSortLabel,
   Tooltip,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
 } from '@mui/material';
 import {
   Visibility as VisibilityIcon,
@@ -30,17 +34,29 @@ export default function BackupHistory() {
   const [logDialogOpen, setLogDialogOpen] = useState(false);
   const [orderBy, setOrderBy] = useState('started_at');
   const [order, setOrder] = useState('desc');
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(50);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     fetchHistory();
     const interval = setInterval(fetchHistory, 10000); // Refresh every 10 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [page, rowsPerPage]);
 
   const fetchHistory = async () => {
     try {
-      const response = await api.get('/backup-history/');
+      const skip = page * rowsPerPage;
+      const response = await api.get('/backup-history/', {
+        params: { skip, limit: rowsPerPage }
+      });
       setHistory(response.data);
+      // If we get fewer results than limit, we know the exact total
+      if (response.data.length < rowsPerPage) {
+        setTotalCount(skip + response.data.length);
+      } else {
+        setTotalCount((page + 2) * rowsPerPage); // Estimate there's at least one more page
+      }
     } catch (error) {
       console.error('Failed to fetch backup history:', error);
     }
@@ -246,6 +262,52 @@ export default function BackupHistory() {
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* Pagination Controls */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>
+        <FormControl size="small" sx={{ minWidth: 120 }}>
+          <InputLabel>Rows per page</InputLabel>
+          <Select
+            value={rowsPerPage}
+            label="Rows per page"
+            onChange={(e) => {
+              setRowsPerPage(e.target.value);
+              setPage(0);
+            }}
+          >
+            <MenuItem value={25}>25</MenuItem>
+            <MenuItem value={50}>50</MenuItem>
+            <MenuItem value={100}>100</MenuItem>
+            <MenuItem value={500}>500</MenuItem>
+          </Select>
+        </FormControl>
+        
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Showing {page * rowsPerPage + 1} - {page * rowsPerPage + history.length} of {history.length < rowsPerPage ? totalCount : `${totalCount}+`}
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={page === 0}
+              onClick={() => setPage(page - 1)}
+              sx={{ minWidth: 80 }}
+            >
+              Previous
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={history.length < rowsPerPage}
+              onClick={() => setPage(page + 1)}
+              sx={{ minWidth: 80 }}
+            >
+              Next
+            </Button>
+          </Box>
+        </Box>
+      </Box>
 
       <Dialog open={logDialogOpen} onClose={() => setLogDialogOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>Backup Log Details</DialogTitle>
