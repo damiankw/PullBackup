@@ -130,26 +130,57 @@ class BackupJobBase(BaseModel):
     @validator('schedule')
     def validate_schedule(cls, v):
         if v and v.strip():
-            # Basic cron validation - you can make this more robust
+            # Basic cron validation supporting */N, comma-separated, and ranges
             parts = v.strip().split()
             if len(parts) != 5:
                 raise ValueError('Invalid schedule format')
-            # Validate each part is either * or a number/range
-            try:
-                minute, hour, day, month, weekday = parts
-                # Just basic validation that they're valid cron parts
-                if minute != '*':
-                    int(minute)
-                if hour != '*':
-                    int(hour)
-                if day != '*':
-                    int(day)
-                if month != '*':
-                    int(month)
-                if weekday != '*':
-                    int(weekday)
-            except ValueError:
-                raise ValueError('Invalid schedule format')
+            
+            def is_valid_cron_field(field, min_val, max_val):
+                """Validate a single cron field."""
+                if field == '*':
+                    return True
+                # Handle */N pattern (e.g., */4)
+                if field.startswith('*/'):
+                    try:
+                        interval = int(field[2:])
+                        return min_val <= interval <= max_val
+                    except ValueError:
+                        return False
+                # Handle comma-separated values (e.g., 0,8,16)
+                if ',' in field:
+                    try:
+                        values = [int(x) for x in field.split(',')]
+                        return all(min_val <= val <= max_val for val in values)
+                    except ValueError:
+                        return False
+                # Handle ranges (e.g., 1-5)
+                if '-' in field:
+                    try:
+                        start, end = field.split('-')
+                        start, end = int(start), int(end)
+                        return min_val <= start <= end <= max_val
+                    except ValueError:
+                        return False
+                # Handle single number
+                try:
+                    num = int(field)
+                    return min_val <= num <= max_val
+                except ValueError:
+                    return False
+            
+            minute, hour, day, month, weekday = parts
+            
+            if not is_valid_cron_field(minute, 0, 59):
+                raise ValueError('Invalid minute field')
+            if not is_valid_cron_field(hour, 0, 23):
+                raise ValueError('Invalid hour field')
+            if not is_valid_cron_field(day, 1, 31):
+                raise ValueError('Invalid day field')
+            if not is_valid_cron_field(month, 1, 12):
+                raise ValueError('Invalid month field')
+            if not is_valid_cron_field(weekday, 0, 6):
+                raise ValueError('Invalid weekday field')
+        
         return v
 
 

@@ -58,6 +58,8 @@ export default function BackupJobs() {
     minute: '0',
     dayOfWeek: '1',
     dayOfMonth: '1',
+    hourInterval: '4',  // For hourly schedules
+    timesPerDay: '2',   // For multiple-daily schedules
   });
 
   useEffect(() => {
@@ -91,35 +93,60 @@ export default function BackupJobs() {
         minute: '0',
         dayOfWeek: '1',
         dayOfMonth: '1',
+        hourInterval: '4',
+        timesPerDay: '2',
       };
     }
     
     const parts = cronExpression.split(' ');
-    if (parts.length !== 5) return { frequency: 'manual', hour: '2', minute: '0', dayOfWeek: '1', dayOfMonth: '1' };
+    if (parts.length !== 5) return { frequency: 'manual', hour: '2', minute: '0', dayOfWeek: '1', dayOfMonth: '1', hourInterval: '4', timesPerDay: '2' };
     
     const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
     
+    // Hourly patterns: 0 */4 * * * (every N hours)
+    if (hour.startsWith('*/') && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+      const interval = hour.substring(2);
+      return { frequency: 'hourly', hour: '0', minute, dayOfWeek: '1', dayOfMonth: '1', hourInterval: interval, timesPerDay: '2' };
+    }
+    
+    // Multiple times daily: 0 0,8,16 * * * (specific hours)
+    if (hour.includes(',') && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+      const hours = hour.split(',');
+      const timesPerDay = hours.length.toString();
+      return { frequency: 'multiple-daily', hour: hours[0], minute, dayOfWeek: '1', dayOfMonth: '1', hourInterval: '4', timesPerDay };
+    }
+    
     // Daily: 0 2 * * *
-    if (dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
-      return { frequency: 'daily', hour, minute, dayOfWeek: '1', dayOfMonth: '1' };
+    if (dayOfMonth === '*' && month === '*' && dayOfWeek === '*' && !hour.includes('*') && !hour.includes(',')) {
+      return { frequency: 'daily', hour, minute, dayOfWeek: '1', dayOfMonth: '1', hourInterval: '4', timesPerDay: '2' };
     }
     // Weekly: 0 2 * * 1
     if (dayOfMonth === '*' && month === '*' && dayOfWeek !== '*') {
-      return { frequency: 'weekly', hour, minute, dayOfWeek, dayOfMonth: '1' };
+      return { frequency: 'weekly', hour, minute, dayOfWeek, dayOfMonth: '1', hourInterval: '4', timesPerDay: '2' };
     }
     // Monthly: 0 2 1 * *
     if (dayOfMonth !== '*' && month === '*' && dayOfWeek === '*') {
-      return { frequency: 'monthly', hour, minute, dayOfWeek: '1', dayOfMonth };
+      return { frequency: 'monthly', hour, minute, dayOfWeek: '1', dayOfMonth, hourInterval: '4', timesPerDay: '2' };
     }
     
-    return { frequency: 'manual', hour: '2', minute: '0', dayOfWeek: '1', dayOfMonth: '1' };
+    return { frequency: 'manual', hour: '2', minute: '0', dayOfWeek: '1', dayOfMonth: '1', hourInterval: '4', timesPerDay: '2' };
   };
   
   const buildCronExpression = (config) => {
     if (config.frequency === 'manual') return '';
     
-    const { frequency, hour, minute, dayOfWeek, dayOfMonth } = config;
+    const { frequency, hour, minute, dayOfWeek, dayOfMonth, hourInterval, timesPerDay } = config;
     
+    if (frequency === 'hourly') {
+      return `${minute} */${hourInterval} * * *`;
+    }
+    if (frequency === 'multiple-daily') {
+      // Calculate evenly spaced hours throughout the day
+      const times = parseInt(timesPerDay);
+      const interval = 24 / times;
+      const hours = Array.from({ length: times }, (_, i) => i * interval).join(',');
+      return `${minute} ${hours} * * *`;
+    }
     if (frequency === 'daily') {
       return `${minute} ${hour} * * *`;
     }
@@ -145,6 +172,18 @@ export default function BackupJobs() {
     const timeStr = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
     
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    
+    // Hourly patterns
+    if (hour.startsWith('*/') && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+      const interval = hour.substring(2);
+      return `Every ${interval} hour${interval !== '1' ? 's' : ''}`;
+    }
+    
+    // Multiple times daily
+    if (hour.includes(',') && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+      const hours = hour.split(',');
+      return `${hours.length}x daily at ${hours.map(h => h.padStart(2, '0') + ':' + minute.padStart(2, '0')).join(', ')}`;
+    }
     
     // Daily
     if (dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
@@ -182,6 +221,8 @@ export default function BackupJobs() {
         minute: '0',
         dayOfWeek: '1',
         dayOfMonth: '1',
+        hourInterval: '4',
+        timesPerDay: '2',
       });
     }
     setOpen(true);
@@ -549,6 +590,8 @@ export default function BackupJobs() {
                     onChange={(e) => setScheduleConfig({ ...scheduleConfig, frequency: e.target.value })}
                   >
                     <MenuItem value="manual">Manual Only</MenuItem>
+                    <MenuItem value="hourly">Every N Hours</MenuItem>
+                    <MenuItem value="multiple-daily">Multiple Times Daily</MenuItem>
                     <MenuItem value="daily">Daily</MenuItem>
                     <MenuItem value="weekly">Weekly</MenuItem>
                     <MenuItem value="monthly">Monthly</MenuItem>
@@ -556,7 +599,80 @@ export default function BackupJobs() {
                 </FormControl>
               </Grid>
               
-              {scheduleConfig.frequency !== 'manual' && (
+              {scheduleConfig.frequency === 'hourly' && (
+                <>
+                  <Grid item xs={12}>
+                    <FormControl fullWidth>
+                      <InputLabel>Interval</InputLabel>
+                      <Select
+                        value={scheduleConfig.hourInterval}
+                        label="Interval"
+                        onChange={(e) => setScheduleConfig({ ...scheduleConfig, hourInterval: e.target.value })}
+                      >
+                        <MenuItem value="1">Every hour</MenuItem>
+                        <MenuItem value="2">Every 2 hours</MenuItem>
+                        <MenuItem value="3">Every 3 hours</MenuItem>
+                        <MenuItem value="4">Every 4 hours</MenuItem>
+                        <MenuItem value="6">Every 6 hours</MenuItem>
+                        <MenuItem value="8">Every 8 hours</MenuItem>
+                        <MenuItem value="12">Every 12 hours</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <FormControl fullWidth>
+                      <InputLabel>Starting Minute</InputLabel>
+                      <Select
+                        value={scheduleConfig.minute}
+                        label="Starting Minute"
+                        onChange={(e) => setScheduleConfig({ ...scheduleConfig, minute: e.target.value })}
+                      >
+                        <MenuItem value="0">:00</MenuItem>
+                        <MenuItem value="15">:15</MenuItem>
+                        <MenuItem value="30">:30</MenuItem>
+                        <MenuItem value="45">:45</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </>
+              )}
+              
+              {scheduleConfig.frequency === 'multiple-daily' && (
+                <>
+                  <Grid item xs={12}>
+                    <FormControl fullWidth>
+                      <InputLabel>Times Per Day</InputLabel>
+                      <Select
+                        value={scheduleConfig.timesPerDay}
+                        label="Times Per Day"
+                        onChange={(e) => setScheduleConfig({ ...scheduleConfig, timesPerDay: e.target.value })}
+                      >
+                        <MenuItem value="2">2 times (every 12 hours)</MenuItem>
+                        <MenuItem value="3">3 times (every 8 hours)</MenuItem>
+                        <MenuItem value="4">4 times (every 6 hours)</MenuItem>
+                        <MenuItem value="6">6 times (every 4 hours)</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <FormControl fullWidth>
+                      <InputLabel>Starting Minute</InputLabel>
+                      <Select
+                        value={scheduleConfig.minute}
+                        label="Starting Minute"
+                        onChange={(e) => setScheduleConfig({ ...scheduleConfig, minute: e.target.value })}
+                      >
+                        <MenuItem value="0">:00</MenuItem>
+                        <MenuItem value="15">:15</MenuItem>
+                        <MenuItem value="30">:30</MenuItem>
+                        <MenuItem value="45">:45</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </>
+              )}
+              
+              {scheduleConfig.frequency !== 'manual' && scheduleConfig.frequency !== 'hourly' && scheduleConfig.frequency !== 'multiple-daily' && (
                 <>
                   <Grid item xs={6}>
                     <FormControl fullWidth>
