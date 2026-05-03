@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
 import enum
+import uuid
 
 
 class UserRole(str, enum.Enum):
@@ -77,6 +78,7 @@ class BackupJob(Base):
     __tablename__ = "backup_jobs"
     
     id = Column(Integer, primary_key=True, index=True)
+    backup_uuid = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     name = Column(String(100), nullable=False)
     server_id = Column(Integer, ForeignKey("servers.id"), nullable=False)
     remote_path = Column(String(500), nullable=False)
@@ -108,6 +110,9 @@ class BackupHistory(Base):
     log_output = Column(Text, nullable=True)
     bytes_transferred = Column(Integer, default=0)
     files_transferred = Column(Integer, default=0)
+    snapshot_size_bytes = Column(Integer, default=0)  # Actual disk usage (new data)
+    snapshot_total_size_bytes = Column(Integer, default=0)  # Logical size (all files)
+    space_saved_bytes = Column(Integer, default=0)  # Space saved by hardlinks
     triggered_by = Column(String(50), nullable=True)  # 'manual', 'schedule', 'api'
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     

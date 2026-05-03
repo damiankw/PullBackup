@@ -9,31 +9,50 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
+    console.log('[AuthContext] Initializing, token:', !!token);
     if (token) {
       fetchUserProfile();
     } else {
+      console.log('[AuthContext] No token, setting loading false');
       setLoading(false);
     }
   }, []);
 
   const fetchUserProfile = async () => {
+    console.log('[AuthContext] Fetching user profile...');
     try {
       const response = await api.get('/users/me');
+      console.log('[AuthContext] User profile fetched:', response.data);
       setUser(response.data);
+      return true;
     } catch (error) {
-      console.error('Failed to fetch user profile:', error);
+      console.error('[AuthContext] Failed to fetch user profile:', error);
       localStorage.removeItem('token');
+      setUser(null);
+      return false;
     } finally {
+      console.log('[AuthContext] Setting loading to false');
       setLoading(false);
     }
   };
 
   const login = async (username, password) => {
-    const response = await api.post('/auth/login', { username, password });
-    const { access_token } = response.data;
-    localStorage.setItem('token', access_token);
-    await fetchUserProfile();
-    return response.data;
+    console.log('[AuthContext] Login attempt for:', username);
+    setLoading(true);
+    try {
+      const response = await api.post('/auth/login', { username, password });
+      console.log('[AuthContext] Login response:', response.data);
+      const { access_token } = response.data;
+      localStorage.setItem('token', access_token);
+      console.log('[AuthContext] Token saved, fetching profile...');
+      await fetchUserProfile();
+      console.log('[AuthContext] Login complete, user:', user);
+      return response.data;
+    } catch (error) {
+      console.error('[AuthContext] Login error:', error);
+      setLoading(false);
+      throw error;
+    }
   };
 
   const logout = () => {
@@ -57,7 +76,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     register,
     loading,
-    isAuthenticated: !!localStorage.getItem('token')
+    isAuthenticated: !!user
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

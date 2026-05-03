@@ -17,6 +17,7 @@ import {
   Button,
   IconButton,
   TableSortLabel,
+  Tooltip,
 } from '@mui/material';
 import {
   Visibility as VisibilityIcon,
@@ -109,7 +110,7 @@ export default function BackupHistory() {
       bValue = bValue ? new Date(bValue).getTime() : 0;
     }
     
-    if (orderBy === 'bytes_transferred' || orderBy === 'files_transferred') {
+    if (orderBy === 'bytes_transferred' || orderBy === 'files_transferred' || orderBy === 'snapshot_size_bytes') {
       aValue = aValue || 0;
       bValue = bValue || 0;
     }
@@ -177,6 +178,15 @@ export default function BackupHistory() {
               </TableCell>
               <TableCell>
                 <TableSortLabel
+                  active={orderBy === 'snapshot_size_bytes'}
+                  direction={orderBy === 'snapshot_size_bytes' ? order : 'asc'}
+                  onClick={() => handleSort('snapshot_size_bytes')}
+                >
+                  Snapshot Size
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>
+                <TableSortLabel
                   active={orderBy === 'files_transferred'}
                   direction={orderBy === 'files_transferred' ? order : 'asc'}
                   onClick={() => handleSort('files_transferred')}
@@ -213,6 +223,15 @@ export default function BackupHistory() {
                   {formatDuration(entry.started_at, entry.completed_at)}
                 </TableCell>
                 <TableCell>{formatBytes(entry.bytes_transferred)}</TableCell>
+                <TableCell>
+                  <Tooltip title={
+                    entry.space_saved_bytes > 0 
+                      ? `Logical: ${formatBytes(entry.snapshot_total_size_bytes)} | Saved: ${formatBytes(entry.space_saved_bytes)} (${((entry.space_saved_bytes / entry.snapshot_total_size_bytes) * 100).toFixed(1)}%)`
+                      : 'First snapshot (full backup)'
+                  }>
+                    <span>{formatBytes(entry.snapshot_size_bytes)}</span>
+                  </Tooltip>
+                </TableCell>
                 <TableCell>{entry.files_transferred}</TableCell>
                 <TableCell>
                   <Chip label={entry.triggered_by || 'Unknown'} size="small" variant="outlined" />

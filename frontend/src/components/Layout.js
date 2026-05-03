@@ -25,6 +25,7 @@ import {
   CloudSync as CloudSyncIcon,
   People as PeopleIcon,
   Person as PersonIcon,
+  FolderOpen as FolderOpenIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../AuthContext';
 
@@ -36,6 +37,7 @@ const menuItems = [
   { text: 'SSH Keys', icon: <VpnKeyIcon />, path: '/ssh-keys' },
   { text: 'Backup Jobs', icon: <BackupIcon />, path: '/backup-jobs' },
   { text: 'History', icon: <HistoryIcon />, path: '/backup-history' },
+  { text: 'Browse Backups', icon: <FolderOpenIcon />, path: '/browse' },
   { text: 'Users', icon: <PeopleIcon />, path: '/users', adminOnly: true },
   { text: 'Profile', icon: <PersonIcon />, path: '/profile' },
 ];
@@ -92,7 +94,7 @@ export default function Layout() {
             PullBackup
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            Enterprise Backup System
+            Because rsync is hard
           </Typography>
         </Box>
       </Box>

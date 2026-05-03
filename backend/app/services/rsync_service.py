@@ -107,7 +107,11 @@ class RsyncService:
         local_path: str,
         ssh_key_path: Optional[str] = None,
         rsync_options: Optional[str] = None,
-        callback=None
+        callback=None,
+        job_id: Optional[int] = None,
+        backup_uuid: Optional[str] = None,
+        job_name: Optional[str] = None,
+        server_name: Optional[str] = None
     ) -> Tuple[bool, str, dict]:
         """
         Execute incremental rsync backup from remote server to local path.
@@ -118,30 +122,44 @@ class RsyncService:
             port: SSH port
             username: SSH username
             remote_path: Path on remote server
-            local_path: Local destination path (base directory for snapshots)
+            local_path: Local destination path (DEPRECATED - use backup_uuid)
             ssh_key_path: Path to SSH private key
             rsync_options: Custom rsync options
             callback: Optional callback function for progress updates
+            job_id: Backup job ID (DEPRECATED - use backup_uuid)
+            backup_uuid: Backup job UUID (preferred)
+            job_name: Job name for README
+            server_name: Server name for README
         
         Returns:
             Tuple of (success, log_output, stats)
         """
         try:
-            # Create base backup directory for this job
-            base_backup_dir = self.backup_root / local_path.lstrip('/')
+            # Create base backup directory for this job using UUID
+            if backup_uuid:
+                base_backup_dir = self.backup_root / backup_uuid
+            elif job_id is not None:
+                base_backup_dir = self.backup_root / f"job-{job_id}"
+            else:
+                base_backup_dir = self.backup_root / local_path.lstrip('/')
             base_backup_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Find previous snapshot for hardlinking BEFORE creating new snapshot
+            previous_snapshot = self._find_latest_snapshot(base_backup_dir)
             
             # Create dated snapshot directory
             snapshot_name = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
             snapshot_dir = base_backup_dir / snapshot_name
             snapshot_dir.mkdir(parents=True, exist_ok=True)
             
-            # Find previous snapshot for hardlinking
-            previous_snapshot = self._find_latest_snapshot(base_backup_dir)
-            
             # Build rsync command
             options = rsync_options or self.rsync_options
-            cmd = ["rsync"]
+            # Use system PATH to find rsync (prefers Homebrew/GNU version if available)
+            # On macOS: finds Homebrew rsync if installed, otherwise falls back to openrsync
+            # On Linux: finds GNU rsync (the default)
+            import shutil
+            rsync_bin = shutil.which('rsync') or 'rsync'
+            cmd = [rsync_bin]
             
             # Add base options (remove --delete if present)
             option_parts = options.split()
@@ -154,8 +172,10 @@ class RsyncService:
             
             # Add --link-dest if we have a previous snapshot
             if previous_snapshot:
-                # --link-dest path must be relative to destination or absolute
-                cmd.append(f"--link-dest={previous_snapshot}")
+                # --link-dest path must be relative to destination directory
+                # Use ../snapshot_name format so rsync can find it relative to new snapshot
+                relative_link_path = f"../{previous_snapshot.name}"
+                cmd.append(f"--link-dest={relative_link_path}")
             
             # Add SSH options
             ssh_cmd = f"ssh -p {port} -o StrictHostKeyChecking=no"
@@ -206,6 +226,10 @@ class RsyncService:
             success = process.returncode == 0
             
             if success:
+                # Calculate actual snapshot size and space saved
+                size_stats = self._calculate_snapshot_size(snapshot_dir)
+                stats.update(size_stats)
+                
                 log_output += f"\n\n=== Snapshot Info ==="
                 log_output += f"\nSnapshot created: {snapshot_name}"
                 log_output += f"\nFull path: {snapshot_dir}"
@@ -214,6 +238,15 @@ class RsyncService:
                     log_output += f"\nNote: Unchanged files are hardlinked to save space"
                 else:
                     log_output += f"\nNote: First snapshot (full backup)"
+                
+                # Add size information
+                log_output += f"\n\n=== Storage Stats ==="
+                log_output += f"\nActual disk usage (new data): {self._format_bytes(size_stats['snapshot_size_bytes'])}"
+                log_output += f"\nLogical size (all files): {self._format_bytes(size_stats['snapshot_total_size_bytes'])}"
+                if size_stats['space_saved_bytes'] > 0:
+                    log_output += f"\nSpace saved by hardlinks: {self._format_bytes(size_stats['space_saved_bytes'])}"
+                    efficiency = (size_stats['space_saved_bytes'] / size_stats['snapshot_total_size_bytes'] * 100) if size_stats['snapshot_total_size_bytes'] > 0 else 0
+                    log_output += f"\nSpace efficiency: {efficiency:.1f}%"
             else:
                 log_output += f"\n\nRsync failed with exit code {process.returncode}"
                 # Clean up failed snapshot directory
@@ -229,7 +262,21 @@ class RsyncService:
             
         except Exception as e:
             error_msg = f"Backup execution error: {str(e)}"
-            return False, error_msg, {'bytes_transferred': 0, 'files_transferred': 0}
+            return False, error_msg, {
+                'bytes_transferred': 0,
+                'files_transferred': 0,
+                'snapshot_size_bytes': 0,
+                'snapshot_total_size_bytes': 0,
+                'space_saved_bytes': 0
+            }
+    
+    def _format_bytes(self, bytes_val: int) -> str:
+        """Format bytes into human-readable string."""
+        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+            if bytes_val < 1024.0:
+                return f"{bytes_val:.2f} {unit}"
+            bytes_val /= 1024.0
+        return f"{bytes_val:.2f} PB"
     
     def _parse_rsync_stats(self, output: str) -> dict:
         """Parse rsync output for statistics."""
@@ -280,6 +327,58 @@ class RsyncService:
         
         return stats
     
+    def _calculate_snapshot_size(self, snapshot_dir: Path) -> dict:
+        """
+        Calculate actual disk usage and logical size of a snapshot.
+        
+        Returns dict with:
+            - snapshot_size_bytes: Actual disk space used (new data)
+            - snapshot_total_size_bytes: Logical size of all files
+            - space_saved_bytes: Space saved by hardlinks
+        """
+        try:
+            # Get actual disk usage (space used on disk, respects hardlinks)
+            result_actual = subprocess.run(
+                ['du', '-sb', str(snapshot_dir)],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            # Get apparent size (logical size of all files, ignores hardlinks)
+            result_apparent = subprocess.run(
+                ['du', '-sb', '--apparent-size', str(snapshot_dir)],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            actual_bytes = 0
+            apparent_bytes = 0
+            
+            if result_actual.returncode == 0:
+                # Parse output: "12345\t/path/to/snapshot"
+                actual_bytes = int(result_actual.stdout.split()[0])
+            
+            if result_apparent.returncode == 0:
+                apparent_bytes = int(result_apparent.stdout.split()[0])
+            
+            space_saved = apparent_bytes - actual_bytes if apparent_bytes > actual_bytes else 0
+            
+            return {
+                'snapshot_size_bytes': actual_bytes,
+                'snapshot_total_size_bytes': apparent_bytes,
+                'space_saved_bytes': space_saved
+            }
+            
+        except Exception as e:
+            print(f"Warning: Could not calculate snapshot size: {e}")
+            return {
+                'snapshot_size_bytes': 0,
+                'snapshot_total_size_bytes': 0,
+                'space_saved_bytes': 0
+            }
+    
     def save_ssh_key(self, key_name: str, private_key_content: str, owner_id: int) -> str:
         """
         Save SSH private key to disk.
@@ -327,17 +426,26 @@ class RsyncService:
         except Exception:
             return None
     
-    def list_snapshots(self, local_path: str) -> list:
+    def list_snapshots(self, local_path: str = None, job_id: int = None, backup_uuid: str = None) -> list:
         """
         List all snapshots for a given backup job.
         
         Args:
-            local_path: Base backup path
+            local_path: Base backup path (DEPRECATED, use backup_uuid)
+            job_id: Backup job ID (DEPRECATED, use backup_uuid)
+            backup_uuid: Backup job UUID (preferred)
             
         Returns:
             List of snapshot info dictionaries
         """
-        base_backup_dir = self.backup_root / local_path.lstrip('/')
+        # Use backup_uuid for path if provided
+        if backup_uuid:
+            base_backup_dir = self.backup_root / backup_uuid
+        elif job_id is not None:
+            base_backup_dir = self.backup_root / f"job-{job_id}"
+        else:
+            base_backup_dir = self.backup_root / local_path.lstrip('/')
+        
         if not base_backup_dir.exists():
             return []
         
@@ -355,27 +463,35 @@ class RsyncService:
                         'path': str(item),
                     }
                     snapshots.append(snapshot_info)
-                except (ValueError, IndexError):
+                except (ValueError, IndexError) as e:
                     continue
         
         # Sort by date, newest first
         snapshots.sort(key=lambda x: x['date'], reverse=True)
         return snapshots
     
-    def delete_snapshot(self, local_path: str, snapshot_name: str) -> Tuple[bool, str]:
+    def delete_snapshot(self, local_path: str = None, snapshot_name: str = None, job_id: int = None, backup_uuid: str = None) -> Tuple[bool, str]:
         """
         Delete a specific snapshot.
         
         Args:
-            local_path: Base backup path
+            local_path: Base backup path (DEPRECATED, use backup_uuid)
             snapshot_name: Name of snapshot directory to delete
+            job_id: Backup job ID (DEPRECATED, use backup_uuid)
+            backup_uuid: Backup job UUID (preferred)
             
         Returns:
             Tuple of (success, message)
         """
         try:
             import shutil
-            base_backup_dir = self.backup_root / local_path.lstrip('/')
+            # Use backup_uuid for path if provided
+            if backup_uuid:
+                base_backup_dir = self.backup_root / backup_uuid
+            elif job_id is not None:
+                base_backup_dir = self.backup_root / f"job-{job_id}"
+            else:
+                base_backup_dir = self.backup_root / local_path.lstrip('/')
             snapshot_dir = base_backup_dir / snapshot_name
             
             if not snapshot_dir.exists():
@@ -392,6 +508,101 @@ class RsyncService:
             
         except Exception as e:
             return False, f"Failed to delete snapshot: {str(e)}"
+    
+    def generate_readme(
+        self,
+        backup_uuid: str,
+        job_name: str,
+        server_name: str,
+        hostname: str,
+        port: int,
+        username: str,
+        remote_path: str,
+        schedule: str = None,
+        rsync_options: str = None
+    ) -> None:
+        """
+        Generate a README.md file in the backup directory with job metadata.
+        This helps with manual recovery if the system is unavailable.
+        
+        Args:
+            backup_uuid: Backup job UUID
+            job_name: Name of the backup job
+            server_name: Name of the server
+            hostname: Server hostname
+            port: SSH port
+            username: SSH username
+            remote_path: Path on remote server
+            schedule: Backup schedule (cron format)
+            rsync_options: rsync options used
+        """
+        try:
+            base_backup_dir = self.backup_root / backup_uuid
+            base_backup_dir.mkdir(parents=True, exist_ok=True)
+            
+            readme_path = base_backup_dir / "README.md"
+            
+            # List snapshots
+            snapshots = self.list_snapshots(backup_uuid=backup_uuid)
+            snapshot_list = "\n".join([f"- `{s['name']}` - {s['date']}" for s in snapshots])
+            if not snapshot_list:
+                snapshot_list = "No snapshots yet"
+            
+            readme_content = f"""# Backup Job: {job_name}
+
+## Job Information
+
+- **Job UUID**: `{backup_uuid}`
+- **Job Name**: {job_name}
+- **Status**: Active
+- **Created**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## Source Server
+
+- **Server Name**: {server_name}
+- **Hostname**: {hostname}
+- **Port**: {port}
+- **Username**: {username}
+- **Remote Path**: `{remote_path}`
+
+## Backup Configuration
+
+- **Schedule**: {schedule or 'Manual only'}
+- **rsync Options**: `{rsync_options or 'Default (-avz)'}`
+- **Backup Strategy**: Incremental snapshots with hardlinks
+
+## Available Snapshots
+
+{snapshot_list}
+
+## Manual Recovery
+
+Each snapshot directory contains a complete point-in-time backup. Files that haven't changed between snapshots are hardlinked to save space.
+
+To manually browse backups:
+```bash
+cd {base_backup_dir}
+ls -la  # List all snapshots
+cd YYYY-MM-DD_HH-MM-SS  # Enter a snapshot directory
+```
+
+To restore files manually:
+```bash
+rsync -av {base_backup_dir}/YYYY-MM-DD_HH-MM-SS/ /path/to/restore/
+```
+
+---
+*This file is automatically generated by PullBackup*
+*Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
+"""
+            
+            with open(readme_path, 'w') as f:
+                f.write(readme_content)
+            
+            print(f"[README] Generated README.md for job {job_name}")
+            
+        except Exception as e:
+            print(f"[README] Failed to generate README: {e}")
 
 
 # Singleton instance

@@ -286,8 +286,26 @@ def execute_backup(job_id: int, history_id: int):
             remote_path=job.remote_path,
             local_path=job.local_path,
             ssh_key_path=ssh_key_path,
-            rsync_options=job.rsync_options
+            rsync_options=job.rsync_options,
+            job_id=job_id,
+            backup_uuid=job.backup_uuid,
+            job_name=job.name,
+            server_name=server.name
         )
+        
+        # Generate/update README.md after backup
+        if success:
+            rsync_service.generate_readme(
+                backup_uuid=job.backup_uuid,
+                job_name=job.name,
+                server_name=server.name,
+                hostname=server.hostname,
+                port=server.port,
+                username=server.username,
+                remote_path=job.remote_path,
+                schedule=job.schedule,
+                rsync_options=job.rsync_options
+            )
         
         # Update history
         history.status = BackupStatus.SUCCESS if success else BackupStatus.FAILED
@@ -295,6 +313,9 @@ def execute_backup(job_id: int, history_id: int):
         history.log_output = log_output
         history.bytes_transferred = stats.get('bytes_transferred', 0)
         history.files_transferred = stats.get('files_transferred', 0)
+        history.snapshot_size_bytes = stats.get('snapshot_size_bytes', 0)
+        history.snapshot_total_size_bytes = stats.get('snapshot_total_size_bytes', 0)
+        history.space_saved_bytes = stats.get('space_saved_bytes', 0)
         
         if not success:
             history.error_message = "Backup failed - check logs for details"

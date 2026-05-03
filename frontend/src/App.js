@@ -11,6 +11,7 @@ import Servers from './pages/Servers';
 import SSHKeys from './pages/SSHKeys';
 import BackupJobs from './pages/BackupJobs';
 import BackupHistory from './pages/BackupHistory';
+import BrowseBackups from './pages/BrowseBackups';
 import Users from './pages/Users';
 import Profile from './pages/Profile';
 import Layout from './components/Layout';
@@ -176,6 +177,8 @@ const theme = createTheme({
 function PrivateRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
   
+  console.log('[PrivateRoute] loading:', loading, 'isAuthenticated:', isAuthenticated);
+  
   if (loading) {
     return <div>Loading...</div>;
   }
@@ -204,6 +207,7 @@ function App() {
               <Route path="ssh-keys" element={<SSHKeys />} />
               <Route path="backup-jobs" element={<BackupJobs />} />
               <Route path="backup-history" element={<BackupHistory />} />
+              <Route path="browse" element={<BrowseBackups />} />
               <Route path="users" element={<Users />} />
               <Route path="profile" element={<Profile />} />
             </Route>

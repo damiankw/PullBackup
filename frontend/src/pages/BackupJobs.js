@@ -23,6 +23,9 @@ import {
   InputLabel,
   Select,
   Grid,
+  Snackbar,
+  Alert,
+  CircularProgress,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -47,6 +50,8 @@ export default function BackupJobs() {
     schedule: '',
     rsync_options: '',
   });
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+  const [runningJobs, setRunningJobs] = useState(new Set());
   
   const [scheduleConfig, setScheduleConfig] = useState({
     frequency: 'manual',
@@ -205,7 +210,11 @@ export default function BackupJobs() {
       handleClose();
     } catch (error) {
       console.error('Failed to save backup job:', error);
-      alert('Failed to save backup job: ' + (error.response?.data?.detail || error.message));
+      setSnackbar({
+        open: true,
+        message: 'Failed to save backup job: ' + (error.response?.data?.detail || error.message),
+        severity: 'error'
+      });
     }
   };
 
@@ -216,18 +225,41 @@ export default function BackupJobs() {
         fetchJobs();
       } catch (error) {
         console.error('Failed to delete backup job:', error);
-        alert('Failed to delete backup job');
+        setSnackbar({ open: true, message: 'Failed to delete backup job', severity: 'error' });
       }
     }
   };
 
   const handleRunNow = async (id) => {
     try {
+      setRunningJobs(prev => new Set([...prev, id]));
+      setSnackbar({ open: true, message: 'Backup started...', severity: 'info' });
+      
       await api.post(`/backup-jobs/${id}/run`);
-      alert('Backup started successfully');
+      
+      setSnackbar({ open: true, message: 'Backup running in background', severity: 'success' });
+      
+      // Remove from running jobs after a delay and refresh
+      setTimeout(() => {
+        setRunningJobs(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(id);
+          return newSet;
+        });
+        fetchJobs();
+      }, 3000);
     } catch (error) {
       console.error('Failed to start backup:', error);
-      alert('Failed to start backup: ' + (error.response?.data?.detail || error.message));
+      setRunningJobs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+      setSnackbar({
+        open: true,
+        message: 'Failed to start backup: ' + (error.response?.data?.detail || error.message),
+        severity: 'error'
+      });
     }
   };
 
@@ -407,6 +439,7 @@ export default function BackupJobs() {
                     size="small" 
                     onClick={() => handleRunNow(job.id)} 
                     title="Run now"
+                    disabled={runningJobs.has(job.id)}
                     sx={{
                       color: '#10b981',
                       '&:hover': {
@@ -414,7 +447,7 @@ export default function BackupJobs() {
                       },
                     }}
                   >
-                    <PlayArrowIcon />
+                    {runningJobs.has(job.id) ? <CircularProgress size={20} /> : <PlayArrowIcon />}
                   </IconButton>
                   <IconButton 
                     size="small" 
@@ -472,22 +505,22 @@ export default function BackupJobs() {
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             sx={{ mt: 2 }}
           />
-          <TextField
-            margin="dense"
-            label="Server"
-            select
-            fullWidth
-            value={formData.server_id}
-            onChange={(e) => setFormData({ ...formData, server_id: e.target.value })}
-            SelectProps={{ native: true }}
-          >
-            <option value="">Select a server</option>
-            {servers.map((server) => (
-              <option key={server.id} value={server.id}>
-                {server.name} ({server.hostname})
-              </option>
-            ))}
-          </TextField>
+          <FormControl fullWidth margin="dense">
+            <InputLabel id="server-label">Server</InputLabel>
+            <Select
+              labelId="server-label"
+              label="Server"
+              value={formData.server_id}
+              onChange={(e) => setFormData({ ...formData, server_id: e.target.value })}
+            >
+              <MenuItem value="">Select a server</MenuItem>
+              {servers.map((server) => (
+                <MenuItem key={server.id} value={server.id}>
+                  {server.name} ({server.hostname})
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <TextField
             margin="dense"
             label="Remote Path"
@@ -622,6 +655,22 @@ export default function BackupJobs() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

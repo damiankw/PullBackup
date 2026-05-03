@@ -18,6 +18,12 @@ import {
   TextField,
   Chip,
   TableSortLabel,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -34,6 +40,7 @@ export default function Servers() {
   const [editingServer, setEditingServer] = useState(null);
   const [orderBy, setOrderBy] = useState('name');
   const [order, setOrder] = useState('asc');
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const [formData, setFormData] = useState({
     name: '',
     hostname: '',
@@ -101,9 +108,10 @@ export default function Servers() {
       }
       fetchServers();
       handleClose();
+      setSnackbar({ open: true, message: `Server ${editingServer ? 'updated' : 'created'} successfully`, severity: 'success' });
     } catch (error) {
       console.error('Failed to save server:', error);
-      alert('Failed to save server: ' + (error.response?.data?.detail || error.message));
+      setSnackbar({ open: true, message: 'Failed to save server: ' + (error.response?.data?.detail || error.message), severity: 'error' });
     }
   };
 
@@ -112,21 +120,21 @@ export default function Servers() {
       try {
         await api.delete(`/servers/${id}`);
         fetchServers();
+        setSnackbar({ open: true, message: 'Server deleted successfully', severity: 'success' });
       } catch (error) {
         console.error('Failed to delete server:', error);
-        alert('Failed to delete server');
+        setSnackbar({ open: true, message: 'Failed to delete server', severity: 'error' });
       }
     }
   };
 
   const handleTestConnection = async (server) => {
     try {
-      const response = await api.post(`/servers/${server.id}/test-connection`);
-      alert(response.data.message);
+      await api.post(`/servers/${server.id}/test-connection`);
       fetchServers();
     } catch (error) {
       console.error('Connection test failed:', error);
-      alert('Connection test failed: ' + (error.response?.data?.detail || error.message));
+      fetchServers();
     }
   };
 
@@ -283,22 +291,22 @@ export default function Servers() {
             value={formData.username}
             onChange={(e) => setFormData({ ...formData, username: e.target.value })}
           />
-          <TextField
-            margin="dense"
-            label="SSH Key"
-            select
-            fullWidth
-            value={formData.ssh_key_id || ''}
-            onChange={(e) => setFormData({ ...formData, ssh_key_id: e.target.value })}
-            SelectProps={{ native: true }}
-          >
-            <option value="">None</option>
-            {sshKeys.map((key) => (
-              <option key={key.id} value={key.id}>
-                {key.name}
-              </option>
-            ))}
-          </TextField>
+          <FormControl fullWidth margin="dense">
+            <InputLabel id="ssh-key-label">SSH Key</InputLabel>
+            <Select
+              labelId="ssh-key-label"
+              label="SSH Key"
+              value={formData.ssh_key_id || ''}
+              onChange={(e) => setFormData({ ...formData, ssh_key_id: e.target.value })}
+            >
+              <MenuItem value="">None</MenuItem>
+              {sshKeys.map((key) => (
+                <MenuItem key={key.id} value={key.id}>
+                  {key.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <TextField
             margin="dense"
             label="Description"
@@ -316,6 +324,21 @@ export default function Servers() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

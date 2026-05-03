@@ -95,7 +95,7 @@ export default function Login() {
               PullBackup
             </Typography>
             <Typography variant="body1" color="text.secondary">
-              Enterprise Backup System
+              Because "rsync -az" was too hard to remember.
             </Typography>
           </Box>
 
