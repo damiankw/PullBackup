@@ -99,6 +99,7 @@ export default function Users() {
       if (editingUser) {
         // For editing, only send fields that can be updated
         const updateData = {
+          username: formData.username,
           email: formData.email,
           role: formData.role,
           is_active: formData.is_active,
@@ -343,8 +344,6 @@ export default function Users() {
             value={formData.username}
             onChange={(e) => setFormData({ ...formData, username: e.target.value })}
             margin="normal"
-            disabled={!!editingUser}
-            helperText={editingUser ? "Username cannot be changed" : ""}
           />
           <TextField
             fullWidth

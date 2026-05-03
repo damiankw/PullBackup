@@ -44,7 +44,7 @@ export default function Dashboard() {
     try {
       const response = await api.get('/backup-history/?limit=20');
       // Filter for failed backups on the frontend
-      const failed = response.data.filter(item => item.status === 'FAILED').slice(0, 3);
+      const failed = response.data.filter(item => item.status === 'failed').slice(0, 3);
       setRecentFailures(failed);
     } catch (error) {
       console.error('Failed to fetch recent failures:', error);

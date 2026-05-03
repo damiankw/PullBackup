@@ -140,6 +140,16 @@ def update_user(
             )
     
     # Update fields
+    if user_data.username is not None:
+        # Check if username is already taken by another user
+        existing = db.query(User).filter(User.username == user_data.username, User.id != user_id).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username already taken"
+            )
+        user.username = user_data.username
+    
     if user_data.email is not None:
         # Check if email is already taken by another user
         existing = db.query(User).filter(User.email == user_data.email, User.id != user_id).first()
