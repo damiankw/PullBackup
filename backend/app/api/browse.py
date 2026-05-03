@@ -30,8 +30,15 @@ def list_snapshots(
     if current_user.role != UserRole.ADMIN and job.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to view this backup job")
     
-    snapshots = rsync_service.list_snapshots(backup_uuid=job.backup_uuid)
-    return {"job_id": job_id, "job_name": job.name, "snapshots": snapshots}
+    snapshots_data = rsync_service.list_snapshots(backup_uuid=job.backup_uuid)
+    return {
+        "job_id": job_id,
+        "job_name": job.name,
+        "snapshots": snapshots_data.get('snapshots', []),
+        "total_actual_size_bytes": snapshots_data.get('total_actual_size_bytes', 0),
+        "total_logical_size_bytes": snapshots_data.get('total_logical_size_bytes', 0),
+        "total_space_saved_bytes": snapshots_data.get('total_space_saved_bytes', 0),
+    }
 
 
 @router.get("/backup-jobs/{job_id}/snapshots/{snapshot_name}/browse")

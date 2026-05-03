@@ -60,6 +60,9 @@ export default function BrowseBackups() {
   const [viewFileSize, setViewFileSize] = useState(0);
   const [viewLoading, setViewLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+  const [totalActualSize, setTotalActualSize] = useState(0);
+  const [totalLogicalSize, setTotalLogicalSize] = useState(0);
+  const [totalSpaceSaved, setTotalSpaceSaved] = useState(0);
 
   // Load backup jobs
   useEffect(() => {
@@ -93,6 +96,9 @@ export default function BrowseBackups() {
             const response = await api.get(`/browse/backup-jobs/${jobId}/snapshots`);
             setSnapshots(response.data.snapshots);
             setJobName(response.data.job_name);
+            setTotalActualSize(response.data.total_actual_size_bytes || 0);
+            setTotalLogicalSize(response.data.total_logical_size_bytes || 0);
+            setTotalSpaceSaved(response.data.total_space_saved_bytes || 0);
             setSelectedSnapshot(snapshot);
             
             // Now browse the snapshot at the specified path
@@ -149,6 +155,9 @@ export default function BrowseBackups() {
         const response = await api.get(`/browse/backup-jobs/${selectedJobId}/snapshots`);
         setSnapshots(response.data.snapshots);
         setJobName(response.data.job_name);
+        setTotalActualSize(response.data.total_actual_size_bytes || 0);
+        setTotalLogicalSize(response.data.total_logical_size_bytes || 0);
+        setTotalSpaceSaved(response.data.total_space_saved_bytes || 0);
         setSelectedSnapshot(null);
         setCurrentPath('');
         setItems([]);
@@ -401,9 +410,23 @@ export default function BrowseBackups() {
       {/* Snapshots */}
       {selectedJobId && snapshots.length > 0 && !selectedSnapshot && (
         <Paper sx={{ p: 3, mb: 3 }}>
-          <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-            Available Snapshots for {jobName}
-          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              Available Snapshots for {jobName}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Chip
+                label={`Total Disk Usage: ${formatSize(totalActualSize)}`}
+                sx={{ backgroundColor: '#14b8a6', color: 'white', fontWeight: 600 }}
+              />
+              {totalSpaceSaved > 0 && (
+                <Chip
+                  label={`Space Saved: ${formatSize(totalSpaceSaved)} (${((totalSpaceSaved / totalLogicalSize) * 100).toFixed(1)}%)`}
+                  sx={{ backgroundColor: '#10b981', color: 'white', fontWeight: 600 }}
+                />
+              )}
+            </Box>
+          </Box>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             {snapshots.map((snapshot) => (
               <Grid item xs={12} sm={6} md={4} key={snapshot.name}>
@@ -419,11 +442,18 @@ export default function BrowseBackups() {
                   }}
                   onClick={() => browseSnapshot(snapshot.name)}
                 >
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <CalendarIcon sx={{ mr: 1, color: '#14b8a6' }} />
-                    <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                      {formatDate(snapshot.date)}
-                    </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <CalendarIcon sx={{ mr: 1, color: '#14b8a6' }} />
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                        {formatDate(snapshot.date)}
+                      </Typography>
+                    </Box>
+                    <Chip
+                      label={formatSize(snapshot.size_bytes || 0)}
+                      size="small"
+                      sx={{ backgroundColor: 'rgba(20, 184, 166, 0.1)', color: '#14b8a6' }}
+                    />
                   </Box>
                   <Typography variant="caption" color="text.secondary">
                     {snapshot.name}

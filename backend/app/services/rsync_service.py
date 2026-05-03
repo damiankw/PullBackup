@@ -464,17 +464,26 @@ class RsyncService:
             return []
         
         snapshots = []
+        total_actual_size = 0
+        total_logical_size = 0
+        
         for item in base_backup_dir.iterdir():
             if item.is_dir():
                 try:
                     # Try to parse directory name as date
                     snapshot_date = datetime.strptime(item.name[:19], '%Y-%m-%d_%H-%M-%S')
                     
-                    # Get size info (rough estimate)
+                    # Calculate size for this snapshot
+                    size_info = self._calculate_snapshot_size(item)
+                    total_actual_size += size_info['snapshot_size_bytes']
+                    total_logical_size += size_info['snapshot_total_size_bytes']
+                    
                     snapshot_info = {
                         'name': item.name,
                         'date': snapshot_date.isoformat(),
                         'path': str(item),
+                        'size_bytes': size_info['snapshot_size_bytes'],
+                        'logical_size_bytes': size_info['snapshot_total_size_bytes'],
                     }
                     snapshots.append(snapshot_info)
                 except (ValueError, IndexError) as e:
@@ -482,7 +491,14 @@ class RsyncService:
         
         # Sort by date, newest first
         snapshots.sort(key=lambda x: x['date'], reverse=True)
-        return snapshots
+        
+        # Add total size information to the result
+        return {
+            'snapshots': snapshots,
+            'total_actual_size_bytes': total_actual_size,
+            'total_logical_size_bytes': total_logical_size,
+            'total_space_saved_bytes': total_logical_size - total_actual_size if total_logical_size > total_actual_size else 0,
+        }
     
     def delete_snapshot(self, local_path: str = None, snapshot_name: str = None, job_id: int = None, backup_uuid: str = None) -> Tuple[bool, str]:
         """
