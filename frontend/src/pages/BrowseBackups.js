@@ -28,6 +28,8 @@ import {
   DialogContent,
   DialogActions,
   Snackbar,
+  FormControlLabel,
+  Switch,
 } from '@mui/material';
 import {
   Folder as FolderIcon,
@@ -38,6 +40,9 @@ import {
   CalendarToday as CalendarIcon,
   Visibility as VisibilityIcon,
   ContentCopy as ContentCopyIcon,
+  FiberNew as NewIcon,
+  Edit as EditIcon,
+  CompareArrows as CompareIcon,
 } from '@mui/icons-material';
 import api from '../api';
 
@@ -63,6 +68,8 @@ export default function BrowseBackups() {
   const [totalActualSize, setTotalActualSize] = useState(0);
   const [totalLogicalSize, setTotalLogicalSize] = useState(0);
   const [totalSpaceSaved, setTotalSpaceSaved] = useState(0);
+  const [showChanges, setShowChanges] = useState(false);
+  const [hasPreviousSnapshot, setHasPreviousSnapshot] = useState(false);
 
   // Load backup jobs
   useEffect(() => {
@@ -184,10 +191,11 @@ export default function BrowseBackups() {
     try {
       const response = await api.get(
         `/browse/backup-jobs/${selectedJobId}/snapshots/${snapshotName}/browse`,
-        { params: { path } }
+        { params: { path, compare: showChanges } }
       );
       setItems(response.data.items);
       setCurrentPath(path);
+      setHasPreviousSnapshot(response.data.has_previous_snapshot || false);
       if (!selectedSnapshot) {
         setSelectedSnapshot(snapshotName);
       }
@@ -203,6 +211,18 @@ export default function BrowseBackups() {
   const navigateToFolder = (folderPath) => {
     browseSnapshot(selectedSnapshot, folderPath);
   };
+
+  // Toggle change detection
+  const handleToggleChanges = () => {
+    setShowChanges(!showChanges);
+  };
+
+  // Re-browse when showChanges toggles
+  useEffect(() => {
+    if (selectedSnapshot && hasRestoredRef.current) {
+      browseSnapshot(selectedSnapshot, currentPath);
+    }
+  }, [showChanges]);
 
   // Navigate up (parent directory)
   const navigateUp = () => {
@@ -480,7 +500,30 @@ export default function BrowseBackups() {
                 sx={{ backgroundColor: '#14b8a6' }}
               />
             </Box>
-            <Box sx={{ display: 'flex', gap: 1 }}>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={showChanges}
+                    onChange={handleToggleChanges}
+                    disabled={!hasPreviousSnapshot}
+                    sx={{
+                      '& .MuiSwitch-switchBase.Mui-checked': {
+                        color: '#14b8a6',
+                      },
+                      '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                        backgroundColor: '#14b8a6',
+                      },
+                    }}
+                  />
+                }
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <CompareIcon sx={{ fontSize: '1rem' }} />
+                    <Typography variant="body2">Show Changes</Typography>
+                  </Box>
+                }
+              />
               <Button
                 variant="outlined"
                 startIcon={<FolderZipIcon />}
@@ -540,13 +583,41 @@ export default function BrowseBackups() {
                       onClick={() => item.type === 'directory' && navigateToFolder(item.path)}
                     >
                       <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           {item.type === 'directory' ? (
                             <FolderIcon sx={{ mr: 1, color: '#14b8a6' }} />
                           ) : (
                             <FileIcon sx={{ mr: 1, color: 'text.secondary' }} />
                           )}
-                          {item.name}
+                          <span>{item.name}</span>
+                          {item.change_status === 'new' && (
+                            <Chip
+                              icon={<NewIcon />}
+                              label="New"
+                              size="small"
+                              sx={{
+                                backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                                color: '#10b981',
+                                border: '1px solid #10b981',
+                                fontWeight: 600,
+                                fontSize: '0.7rem'
+                              }}
+                            />
+                          )}
+                          {item.change_status === 'modified' && (
+                            <Chip
+                              icon={<EditIcon />}
+                              label="Modified"
+                              size="small"
+                              sx={{
+                                backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                                color: '#f59e0b',
+                                border: '1px solid #f59e0b',
+                                fontWeight: 600,
+                                fontSize: '0.7rem'
+                              }}
+                            />
+                          )}
                         </Box>
                       </TableCell>
                       <TableCell>

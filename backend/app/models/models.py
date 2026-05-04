@@ -96,6 +96,7 @@ class BackupJob(Base):
     owner = relationship("User", back_populates="backup_jobs")
     server = relationship("Server", back_populates="backup_jobs")
     history = relationship("BackupHistory", back_populates="backup_job", cascade="all, delete-orphan")
+    snapshots = relationship("Snapshot", back_populates="backup_job", cascade="all, delete-orphan")
 
 
 class BackupHistory(Base):
@@ -118,6 +119,22 @@ class BackupHistory(Base):
     
     # Relationships
     backup_job = relationship("BackupJob", back_populates="history")
+
+
+class Snapshot(Base):
+    __tablename__ = "snapshots"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    backup_job_id = Column(Integer, ForeignKey("backup_jobs.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)  # e.g., "2024-01-15_14-30-00"
+    created_at = Column(DateTime(timezone=True), nullable=False)  # Parsed from snapshot name
+    size_bytes = Column(Integer, default=0, nullable=False)  # Actual disk usage
+    logical_size_bytes = Column(Integer, default=0, nullable=False)  # Logical size of all files
+    file_count = Column(Integer, default=0)
+    indexed_at = Column(DateTime(timezone=True), server_default=func.now())  # When we indexed this
+    
+    # Relationships
+    backup_job = relationship("BackupJob")
 
 
 class EmailSettings(Base):

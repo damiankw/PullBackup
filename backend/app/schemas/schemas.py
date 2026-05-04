@@ -72,6 +72,10 @@ class SSHKeyCreate(SSHKeyBase):
     private_key: str
 
 
+class SSHKeyUpdate(BaseModel):
+    is_public: bool
+
+
 class SSHKey(SSHKeyBase):
     id: int
     fingerprint: Optional[str] = None

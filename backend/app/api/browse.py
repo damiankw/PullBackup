@@ -9,7 +9,7 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.api.deps import get_current_active_user
-from app.models.models import User, BackupJob, UserRole
+from app.models.models import User, BackupJob, UserRole, Snapshot
 from app.services.rsync_service import rsync_service
 
 router = APIRouter()
@@ -21,7 +21,7 @@ def list_snapshots(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """List all snapshots for a backup job."""
+    """List all snapshots for a backup job (cached from database for speed)."""
     job = db.query(BackupJob).filter(BackupJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Backup job not found")
@@ -30,14 +30,92 @@ def list_snapshots(
     if current_user.role != UserRole.ADMIN and job.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to view this backup job")
     
-    snapshots_data = rsync_service.list_snapshots(backup_uuid=job.backup_uuid)
+    # Query snapshots from database (fast!)
+    db_snapshots = db.query(Snapshot).filter(
+        Snapshot.backup_job_id == job_id
+    ).order_by(Snapshot.created_at.desc()).all()
+    
+    # Check if there are snapshots on disk that aren't in the database
+    base_backup_dir = rsync_service.backup_root / job.backup_uuid
+    disk_snapshots = set()
+    
+    if base_backup_dir.exists():
+        for item in base_backup_dir.iterdir():
+            if item.is_dir():
+                try:
+                    # Verify it's a valid snapshot directory
+                    datetime.strptime(item.name[:19], '%Y-%m-%d_%H-%M-%S')
+                    disk_snapshots.add(item.name)
+                except (ValueError, IndexError):
+                    continue
+    
+    # Get snapshot names from database
+    db_snapshot_names = {snap.name for snap in db_snapshots}
+    
+    # Find snapshots on disk that aren't in database (e.g., old backups from before this feature)
+    missing_snapshots = disk_snapshots - db_snapshot_names
+    
+    # Index missing snapshots (calculate their sizes and save to database)
+    if missing_snapshots:
+        for snapshot_name in missing_snapshots:
+            try:
+                snapshot_path = base_backup_dir / snapshot_name
+                snapshot_created_at = datetime.strptime(snapshot_name[:19], '%Y-%m-%d_%H-%M-%S')
+                
+                # Calculate size for this snapshot
+                size_info = rsync_service._calculate_snapshot_size(snapshot_path)
+                
+                # Save to database
+                snapshot = Snapshot(
+                    backup_job_id=job_id,
+                    name=snapshot_name,
+                    created_at=snapshot_created_at,
+                    size_bytes=size_info['snapshot_size_bytes'],
+                    logical_size_bytes=size_info['snapshot_total_size_bytes'],
+                    file_count=0  # We don't have file count for old snapshots
+                )
+                db.add(snapshot)
+                db_snapshots.append(snapshot)
+            except Exception as e:
+                # Skip snapshots that can't be indexed
+                print(f"Failed to index snapshot {snapshot_name}: {e}")
+                continue
+        
+        # Commit all new snapshots
+        try:
+            db.commit()
+        except Exception as e:
+            print(f"Failed to commit snapshot metadata: {e}")
+            db.rollback()
+    
+    # Build response from database snapshots
+    snapshots_list = []
+    total_actual_size = 0
+    total_logical_size = 0
+    
+    for snap in db_snapshots:
+        snapshots_list.append({
+            'name': snap.name,
+            'date': snap.created_at.isoformat(),
+            'path': str(base_backup_dir / snap.name),
+            'size_bytes': snap.size_bytes,
+            'logical_size_bytes': snap.logical_size_bytes,
+        })
+        total_actual_size += snap.size_bytes
+        total_logical_size += snap.logical_size_bytes
+    
+    # Sort by date, newest first
+    snapshots_list.sort(key=lambda x: x['date'], reverse=True)
+    
+    total_space_saved = total_logical_size - total_actual_size if total_logical_size > total_actual_size else 0
+    
     return {
         "job_id": job_id,
         "job_name": job.name,
-        "snapshots": snapshots_data.get('snapshots', []),
-        "total_actual_size_bytes": snapshots_data.get('total_actual_size_bytes', 0),
-        "total_logical_size_bytes": snapshots_data.get('total_logical_size_bytes', 0),
-        "total_space_saved_bytes": snapshots_data.get('total_space_saved_bytes', 0),
+        "snapshots": snapshots_list,
+        "total_actual_size_bytes": total_actual_size,
+        "total_logical_size_bytes": total_logical_size,
+        "total_space_saved_bytes": total_space_saved,
     }
 
 
@@ -46,10 +124,11 @@ def browse_snapshot(
     job_id: int,
     snapshot_name: str,
     path: str = "",
+    compare: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Browse files and folders in a snapshot."""
+    """Browse files and folders in a snapshot with optional change detection."""
     job = db.query(BackupJob).filter(BackupJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Backup job not found")
@@ -72,6 +151,29 @@ def browse_snapshot(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid snapshot name")
     
+    # Get previous snapshot if comparison is requested
+    previous_snapshot_dir = None
+    if compare:
+        # Get all snapshots sorted by date
+        all_snapshots = []
+        if base_backup_dir.exists():
+            for item in base_backup_dir.iterdir():
+                if item.is_dir():
+                    try:
+                        datetime.strptime(item.name[:19], '%Y-%m-%d_%H-%M-%S')
+                        all_snapshots.append(item.name)
+                    except (ValueError, IndexError):
+                        continue
+        
+        all_snapshots.sort()
+        # Find the snapshot just before the current one
+        try:
+            current_index = all_snapshots.index(snapshot_name)
+            if current_index > 0:
+                previous_snapshot_dir = base_backup_dir / all_snapshots[current_index - 1]
+        except ValueError:
+            pass
+    
     # Construct the browse path (sanitize to prevent directory traversal)
     browse_path = snapshot_dir / path.lstrip('/')
     
@@ -93,12 +195,28 @@ def browse_snapshot(
         try:
             for item in sorted(browse_path.iterdir()):
                 relative_path = str(item.relative_to(snapshot_dir))
+                item_stat = item.stat()
+                
+                # Determine change status if comparison is enabled
+                change_status = None
+                if compare and previous_snapshot_dir:
+                    previous_item_path = previous_snapshot_dir / relative_path
+                    if not previous_item_path.exists():
+                        change_status = "new"
+                    elif item.is_file():
+                        # Compare modification times (with small tolerance for floating point)
+                        current_mtime = item_stat.st_mtime
+                        previous_mtime = previous_item_path.stat().st_mtime
+                        if abs(current_mtime - previous_mtime) > 1:  # More than 1 second difference
+                            change_status = "modified"
+                
                 item_info = {
                     "name": item.name,
                     "path": relative_path,
                     "type": "directory" if item.is_dir() else "file",
-                    "size": item.stat().st_size if item.is_file() else 0,
-                    "modified": datetime.fromtimestamp(item.stat().st_mtime).isoformat()
+                    "size": item_stat.st_size if item.is_file() else 0,
+                    "modified": datetime.fromtimestamp(item_stat.st_mtime).isoformat(),
+                    "change_status": change_status
                 }
                 items.append(item_info)
         except PermissionError:
@@ -106,12 +224,26 @@ def browse_snapshot(
     else:
         # If it's a file, return file info
         relative_path = str(browse_path.relative_to(snapshot_dir))
+        item_stat = browse_path.stat()
+        
+        change_status = None
+        if compare and previous_snapshot_dir:
+            previous_file_path = previous_snapshot_dir / relative_path
+            if not previous_file_path.exists():
+                change_status = "new"
+            else:
+                current_mtime = item_stat.st_mtime
+                previous_mtime = previous_file_path.stat().st_mtime
+                if abs(current_mtime - previous_mtime) > 1:
+                    change_status = "modified"
+        
         items = [{
             "name": browse_path.name,
             "path": relative_path,
             "type": "file",
-            "size": browse_path.stat().st_size,
-            "modified": datetime.fromtimestamp(browse_path.stat().st_mtime).isoformat()
+            "size": item_stat.st_size,
+            "modified": datetime.fromtimestamp(item_stat.st_mtime).isoformat(),
+            "change_status": change_status
         }]
     
     return {
@@ -119,7 +251,8 @@ def browse_snapshot(
         "job_name": job.name,
         "snapshot_name": snapshot_name,
         "current_path": path,
-        "items": items
+        "items": items,
+        "has_previous_snapshot": previous_snapshot_dir is not None if compare else None
     }
 
 

@@ -26,6 +26,7 @@ import {
   Delete as DeleteIcon,
   Public as PublicIcon,
   Lock as LockIcon,
+  SwapHoriz as SwapIcon,
 } from '@mui/icons-material';
 import api from '../api';
 import { useAuth } from '../AuthContext';
@@ -83,6 +84,21 @@ export default function SSHKeys() {
       } catch (error) {
         console.error('Failed to delete SSH key:', error);
         alert('Failed to delete SSH key: ' + (error.response?.data?.detail || error.message));
+      }
+    }
+  };
+
+  const handleToggleVisibility = async (key) => {
+    const newIsPublic = !key.is_public;
+    const visibilityType = newIsPublic ? 'public' : 'private';
+    
+    if (window.confirm(`Change "${key.name}" to ${visibilityType}?\n\n${newIsPublic ? 'This key will be visible and usable by all users.' : 'This key will only be visible to you.'}`)) {
+      try {
+        await api.patch(`/ssh-keys/${key.id}`, { is_public: newIsPublic });
+        fetchKeys();
+      } catch (error) {
+        console.error('Failed to update SSH key:', error);
+        alert('Failed to update SSH key: ' + (error.response?.data?.detail || error.message));
       }
     }
   };
@@ -188,9 +204,18 @@ export default function SSHKeys() {
                 <TableCell>{new Date(key.created_at).toLocaleString()}</TableCell>
                 <TableCell>
                   {key.owner_id === user?.id && (
-                    <IconButton size="small" onClick={() => handleDelete(key.id)}>
-                      <DeleteIcon />
-                    </IconButton>
+                    <>
+                      <IconButton 
+                        size="small" 
+                        onClick={() => handleToggleVisibility(key)}
+                        title={key.is_public ? 'Make private' : 'Make public'}
+                      >
+                        <SwapIcon />
+                      </IconButton>
+                      <IconButton size="small" onClick={() => handleDelete(key.id)}>
+                        <DeleteIcon />
+                      </IconButton>
+                    </>
                   )}
                 </TableCell>
               </TableRow>

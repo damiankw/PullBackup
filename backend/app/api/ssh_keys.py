@@ -5,7 +5,7 @@ from typing import List
 from app.core.database import get_db
 from app.api.deps import get_current_active_user
 from app.models.models import User, SSHKey
-from app.schemas.schemas import SSHKeyCreate, SSHKey as SSHKeySchema
+from app.schemas.schemas import SSHKeyCreate, SSHKeyUpdate, SSHKey as SSHKeySchema
 from app.services.rsync_service import rsync_service
 
 router = APIRouter()
@@ -97,6 +97,33 @@ def get_ssh_key(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="SSH key not found"
         )
+    
+    return key
+
+
+@router.patch("/{key_id}", response_model=SSHKeySchema)
+def update_ssh_key(
+    key_id: int,
+    key_update: SSHKeyUpdate,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Update SSH key visibility (public/private)."""
+    key = db.query(SSHKey).filter(
+        SSHKey.id == key_id,
+        SSHKey.owner_id == current_user.id
+    ).first()
+    
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="SSH key not found or you don't have permission to modify it"
+        )
+    
+    # Update the is_public field
+    key.is_public = key_update.is_public
+    db.commit()
+    db.refresh(key)
     
     return key
 

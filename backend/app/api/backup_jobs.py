@@ -5,7 +5,7 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.api.deps import get_current_active_user
-from app.models.models import User, BackupJob, BackupHistory, BackupStatus, Server
+from app.models.models import User, BackupJob, BackupHistory, BackupStatus, Server, Snapshot
 from app.schemas.schemas import (
     BackupJobCreate, BackupJobUpdate, BackupJob as BackupJobSchema,
     BackupJobWithHistory
@@ -318,6 +318,42 @@ def execute_backup(job_id: int, history_id: int):
         
         if not success:
             history.error_message = "Backup failed - check logs for details"
+        
+        # Save snapshot metadata to database for fast listing (if successful)
+        if success and stats.get('snapshot_path'):
+            try:
+                from pathlib import Path
+                snapshot_path = Path(stats['snapshot_path'])
+                snapshot_name = snapshot_path.name
+                
+                # Parse snapshot creation time from name (format: YYYY-MM-DD_HH-MM-SS)
+                snapshot_created_at = datetime.strptime(snapshot_name[:19], '%Y-%m-%d_%H-%M-%S')
+                
+                # Check if snapshot already exists in database
+                existing_snapshot = db.query(Snapshot).filter(
+                    Snapshot.backup_job_id == job.id,
+                    Snapshot.name == snapshot_name
+                ).first()
+                
+                if not existing_snapshot:
+                    # Create new snapshot record
+                    snapshot = Snapshot(
+                        backup_job_id=job.id,
+                        name=snapshot_name,
+                        created_at=snapshot_created_at,
+                        size_bytes=stats.get('snapshot_size_bytes', 0),
+                        logical_size_bytes=stats.get('snapshot_total_size_bytes', 0),
+                        file_count=stats.get('files_transferred', 0)
+                    )
+                    db.add(snapshot)
+                else:
+                    # Update existing snapshot
+                    existing_snapshot.size_bytes = stats.get('snapshot_size_bytes', 0)
+                    existing_snapshot.logical_size_bytes = stats.get('snapshot_total_size_bytes', 0)
+                    existing_snapshot.file_count = stats.get('files_transferred', 0)
+                    existing_snapshot.indexed_at = datetime.now()
+            except Exception as snapshot_error:
+                print(f"Failed to save snapshot metadata: {snapshot_error}")
         
         # Update backup job
         job.last_run = datetime.now()
