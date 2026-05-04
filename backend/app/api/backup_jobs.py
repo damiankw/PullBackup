@@ -337,18 +337,20 @@ def execute_backup(job_id: int, history_id: int):
                 
                 if not existing_snapshot:
                     # Create new snapshot record
+                    # size_bytes = actual NEW data transferred (incremental disk usage)
+                    # logical_size_bytes = total size of all files in snapshot (from du)
                     snapshot = Snapshot(
                         backup_job_id=job.id,
                         name=snapshot_name,
                         created_at=snapshot_created_at,
-                        size_bytes=stats.get('snapshot_size_bytes', 0),
+                        size_bytes=stats.get('bytes_transferred', 0),  # Use rsync's actual transferred bytes
                         logical_size_bytes=stats.get('snapshot_total_size_bytes', 0),
                         file_count=stats.get('files_transferred', 0)
                     )
                     db.add(snapshot)
                 else:
                     # Update existing snapshot
-                    existing_snapshot.size_bytes = stats.get('snapshot_size_bytes', 0)
+                    existing_snapshot.size_bytes = stats.get('bytes_transferred', 0)  # Actual new data
                     existing_snapshot.logical_size_bytes = stats.get('snapshot_total_size_bytes', 0)
                     existing_snapshot.file_count = stats.get('files_transferred', 0)
                     existing_snapshot.indexed_at = datetime.now()

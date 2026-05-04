@@ -128,8 +128,8 @@ class Snapshot(Base):
     backup_job_id = Column(Integer, ForeignKey("backup_jobs.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(100), nullable=False)  # e.g., "2024-01-15_14-30-00"
     created_at = Column(DateTime(timezone=True), nullable=False)  # Parsed from snapshot name
-    size_bytes = Column(Integer, default=0, nullable=False)  # Actual disk usage
-    logical_size_bytes = Column(Integer, default=0, nullable=False)  # Logical size of all files
+    size_bytes = Column(Integer, default=0, nullable=False)  # Incremental: actual NEW data transferred by rsync
+    logical_size_bytes = Column(Integer, default=0, nullable=False)  # Total: logical size of all files in snapshot
     file_count = Column(Integer, default=0)
     indexed_at = Column(DateTime(timezone=True), server_default=func.now())  # When we indexed this
     

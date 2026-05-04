@@ -62,15 +62,18 @@ def list_snapshots(
                 snapshot_path = base_backup_dir / snapshot_name
                 snapshot_created_at = datetime.strptime(snapshot_name[:19], '%Y-%m-%d_%H-%M-%S')
                 
-                # Calculate size for this snapshot
+                # For old snapshots, we only calculate logical size (total)
+                # We can't determine incremental size without rsync stats
                 size_info = rsync_service._calculate_snapshot_size(snapshot_path)
                 
                 # Save to database
+                # Note: size_bytes is 0 for old snapshots (no rsync stats available)
+                # logical_size_bytes is the total size of all files in the snapshot
                 snapshot = Snapshot(
                     backup_job_id=job_id,
                     name=snapshot_name,
                     created_at=snapshot_created_at,
-                    size_bytes=size_info['snapshot_size_bytes'],
+                    size_bytes=0,  # Can't determine incremental size for old snapshots
                     logical_size_bytes=size_info['snapshot_total_size_bytes'],
                     file_count=0  # We don't have file count for old snapshots
                 )
