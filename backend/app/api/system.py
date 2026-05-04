@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from app.core.database import get_db
 from app.api.deps import get_current_active_user
 from app.models.models import User, UserRole, BackupJob, BackupHistory, Server, SSHKey
+from app.services.scheduler import backup_scheduler
 
 router = APIRouter()
 
@@ -184,3 +185,24 @@ def get_storage_stats(
         "total_size_gb": round(sum(j['size'] for j in job_stats) / (1024**3), 2),
         "total_snapshots": sum(j['snapshot_count'] for j in job_stats)
     }
+
+
+@router.post("/reload-scheduler")
+def reload_scheduler(
+    current_user: User = Depends(get_current_active_user)
+):
+    """Reload all scheduled backup jobs from database (admin only)."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        backup_scheduler.reload_all_jobs()
+        return {
+            "message": "Scheduler reloaded successfully",
+            "status": "success"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to reload scheduler: {str(e)}"
+        )
