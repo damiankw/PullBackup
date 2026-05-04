@@ -22,9 +22,13 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  TextField,
+  Grid,
+  Collapse,
 } from '@mui/material';
 import {
   Visibility as VisibilityIcon,
+  FilterList as FilterListIcon,
 } from '@mui/icons-material';
 import api from '../api';
 
@@ -37,19 +41,63 @@ export default function BackupHistory() {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(50);
   const [totalCount, setTotalCount] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
+  
+  // Filter states
+  const [filters, setFilters] = useState({
+    backup_job_id: '',
+    server_id: '',
+    status: '',
+    started_from: '',
+    started_to: ''
+  });
+  
+  // Data for filter dropdowns
+  const [backupJobs, setBackupJobs] = useState([]);
+  const [servers, setServers] = useState([]);
+
+  useEffect(() => {
+    fetchBackupJobs();
+    fetchServers();
+  }, []);
 
   useEffect(() => {
     fetchHistory();
     const interval = setInterval(fetchHistory, 10000); // Refresh every 10 seconds
     return () => clearInterval(interval);
-  }, [page, rowsPerPage]);
+  }, [page, rowsPerPage, filters]);
+
+  const fetchBackupJobs = async () => {
+    try {
+      const response = await api.get('/backup-jobs/');
+      setBackupJobs(response.data);
+    } catch (error) {
+      console.error('Failed to fetch backup jobs:', error);
+    }
+  };
+
+  const fetchServers = async () => {
+    try {
+      const response = await api.get('/servers/');
+      setServers(response.data);
+    } catch (error) {
+      console.error('Failed to fetch servers:', error);
+    }
+  };
 
   const fetchHistory = async () => {
     try {
       const skip = page * rowsPerPage;
-      const response = await api.get('/backup-history/', {
-        params: { skip, limit: rowsPerPage }
-      });
+      const params = { skip, limit: rowsPerPage };
+      
+      // Add filters to params if they have values
+      if (filters.backup_job_id) params.backup_job_id = filters.backup_job_id;
+      if (filters.server_id) params.server_id = filters.server_id;
+      if (filters.status) params.status = filters.status;
+      if (filters.started_from) params.started_from = new Date(filters.started_from).toISOString();
+      if (filters.started_to) params.started_to = new Date(filters.started_to).toISOString();
+      
+      const response = await api.get('/backup-history/', { params });
       setHistory(response.data);
       // If we get fewer results than limit, we know the exact total
       if (response.data.length < rowsPerPage) {
@@ -60,6 +108,22 @@ export default function BackupHistory() {
     } catch (error) {
       console.error('Failed to fetch backup history:', error);
     }
+  };
+
+  const handleFilterChange = (field, value) => {
+    setFilters(prev => ({ ...prev, [field]: value }));
+    setPage(0); // Reset to first page when filters change
+  };
+
+  const handleClearFilters = () => {
+    setFilters({
+      backup_job_id: '',
+      server_id: '',
+      status: '',
+      started_from: '',
+      started_to: ''
+    });
+    setPage(0);
   };
 
   const handleViewLog = (entry) => {
@@ -126,7 +190,7 @@ export default function BackupHistory() {
       bValue = bValue ? new Date(bValue).getTime() : 0;
     }
     
-    if (orderBy === 'bytes_transferred' || orderBy === 'files_transferred' || orderBy === 'snapshot_size_bytes') {
+    if (orderBy === 'bytes_transferred' || orderBy === 'files_transferred') {
       aValue = aValue || 0;
       bValue = bValue || 0;
     }
@@ -138,9 +202,105 @@ export default function BackupHistory() {
 
   return (
     <Box>
-      <Typography variant="h4" gutterBottom>
-        Backup History
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4">
+          Backup History
+        </Typography>
+        <Button
+          variant="outlined"
+          startIcon={<FilterListIcon />}
+          onClick={() => setShowFilters(!showFilters)}
+        >
+          {showFilters ? 'Hide Filters' : 'Show Filters'}
+        </Button>
+      </Box>
+
+      {/* Filter Panel */}
+      <Collapse in={showFilters}>
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6} md={3}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Backup Job</InputLabel>
+                <Select
+                  value={filters.backup_job_id}
+                  label="Backup Job"
+                  onChange={(e) => handleFilterChange('backup_job_id', e.target.value)}
+                >
+                  <MenuItem value="">All Jobs</MenuItem>
+                  {backupJobs.map((job) => (
+                    <MenuItem key={job.id} value={job.id}>{job.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={3}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Server</InputLabel>
+                <Select
+                  value={filters.server_id}
+                  label="Server"
+                  onChange={(e) => handleFilterChange('server_id', e.target.value)}
+                >
+                  <MenuItem value="">All Servers</MenuItem>
+                  {servers.map((server) => (
+                    <MenuItem key={server.id} value={server.id}>{server.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={2}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={filters.status}
+                  label="Status"
+                  onChange={(e) => handleFilterChange('status', e.target.value)}
+                >
+                  <MenuItem value="">All Statuses</MenuItem>
+                  <MenuItem value="success">Success</MenuItem>
+                  <MenuItem value="failed">Failed</MenuItem>
+                  <MenuItem value="running">Running</MenuItem>
+                  <MenuItem value="pending">Pending</MenuItem>
+                  <MenuItem value="cancelled">Cancelled</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={2}>
+              <TextField
+                fullWidth
+                size="small"
+                type="datetime-local"
+                label="Started From"
+                value={filters.started_from}
+                onChange={(e) => handleFilterChange('started_from', e.target.value)}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={2}>
+              <TextField
+                fullWidth
+                size="small"
+                type="datetime-local"
+                label="Started To"
+                value={filters.started_to}
+                onChange={(e) => handleFilterChange('started_to', e.target.value)}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+            
+            <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button onClick={handleClearFilters} variant="outlined" size="small">
+                Clear Filters
+              </Button>
+            </Grid>
+          </Grid>
+        </Paper>
+      </Collapse>
 
       <TableContainer component={Paper}>
         <Table>
@@ -194,15 +354,6 @@ export default function BackupHistory() {
               </TableCell>
               <TableCell>
                 <TableSortLabel
-                  active={orderBy === 'snapshot_size_bytes'}
-                  direction={orderBy === 'snapshot_size_bytes' ? order : 'asc'}
-                  onClick={() => handleSort('snapshot_size_bytes')}
-                >
-                  Snapshot Size
-                </TableSortLabel>
-              </TableCell>
-              <TableCell>
-                <TableSortLabel
                   active={orderBy === 'files_transferred'}
                   direction={orderBy === 'files_transferred' ? order : 'asc'}
                   onClick={() => handleSort('files_transferred')}
@@ -239,15 +390,6 @@ export default function BackupHistory() {
                   {formatDuration(entry.started_at, entry.completed_at)}
                 </TableCell>
                 <TableCell>{formatBytes(entry.bytes_transferred)}</TableCell>
-                <TableCell>
-                  <Tooltip title={
-                    entry.space_saved_bytes > 0 && entry.snapshot_total_size_bytes > 0
-                      ? `Logical: ${formatBytes(entry.snapshot_total_size_bytes)} | Saved: ${formatBytes(entry.space_saved_bytes)} (${((entry.space_saved_bytes / entry.snapshot_total_size_bytes) * 100).toFixed(1)}%)`
-                      : entry.snapshot_size_bytes > 0 ? 'First snapshot (full backup)' : 'No size data available'
-                  }>
-                    <span>{formatBytes(entry.snapshot_size_bytes)}</span>
-                  </Tooltip>
-                </TableCell>
                 <TableCell>{entry.files_transferred}</TableCell>
                 <TableCell>
                   <Chip label={entry.triggered_by || 'Unknown'} size="small" variant="outlined" />

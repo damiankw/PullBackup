@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
+from datetime import datetime
 
 from app.core.database import get_db
 from app.api.deps import get_current_active_user
-from app.models.models import User, BackupHistory, BackupJob
+from app.models.models import User, BackupHistory, BackupJob, Server
 from app.schemas.schemas import BackupHistory as BackupHistorySchema
 
 router = APIRouter()
@@ -15,10 +16,14 @@ def list_backup_history(
     skip: int = 0,
     limit: int = 100,
     backup_job_id: Optional[int] = None,
+    server_id: Optional[int] = None,
+    status: Optional[str] = None,
+    started_from: Optional[datetime] = None,
+    started_to: Optional[datetime] = None,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """List backup history with optional filtering by job."""
+    """List backup history with optional filtering."""
     query = db.query(BackupHistory).join(BackupJob).options(
         joinedload(BackupHistory.backup_job).joinedload(BackupJob.server)
     )
@@ -27,9 +32,24 @@ def list_backup_history(
     if current_user.role.value != 'admin':
         query = query.filter(BackupJob.owner_id == current_user.id)
     
-    # Filter by job if specified
+    # Filter by backup job if specified
     if backup_job_id is not None:
         query = query.filter(BackupHistory.backup_job_id == backup_job_id)
+    
+    # Filter by server if specified
+    if server_id is not None:
+        query = query.filter(BackupJob.server_id == server_id)
+    
+    # Filter by status if specified
+    if status is not None:
+        query = query.filter(BackupHistory.status == status)
+    
+    # Filter by date range if specified
+    if started_from is not None:
+        query = query.filter(BackupHistory.started_at >= started_from)
+    
+    if started_to is not None:
+        query = query.filter(BackupHistory.started_at <= started_to)
     
     # Order by most recent first
     history = query.order_by(BackupHistory.created_at.desc()).offset(skip).limit(limit).all()

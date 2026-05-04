@@ -207,11 +207,19 @@ def browse_snapshot(
                     if not previous_item_path.exists():
                         change_status = "new"
                     elif item.is_file():
-                        # Compare modification times (with small tolerance for floating point)
-                        current_mtime = item_stat.st_mtime
-                        previous_mtime = previous_item_path.stat().st_mtime
-                        if abs(current_mtime - previous_mtime) > 1:  # More than 1 second difference
-                            change_status = "modified"
+                        # Compare inode numbers to detect changes in hardlinked backups
+                        # If inodes are different, the file was modified (rsync created a new file)
+                        # If inodes are the same, the file is hardlinked (unchanged)
+                        try:
+                            previous_stat = previous_item_path.stat()
+                            current_inode = item_stat.st_ino
+                            previous_inode = previous_stat.st_ino
+                            
+                            # Different inodes = file was modified
+                            if current_inode != previous_inode:
+                                change_status = "modified"
+                        except (OSError, PermissionError):
+                            pass  # If we can't stat previous file, skip comparison
                 
                 item_info = {
                     "name": item.name,
@@ -235,10 +243,16 @@ def browse_snapshot(
             if not previous_file_path.exists():
                 change_status = "new"
             else:
-                current_mtime = item_stat.st_mtime
-                previous_mtime = previous_file_path.stat().st_mtime
-                if abs(current_mtime - previous_mtime) > 1:
-                    change_status = "modified"
+                # Compare inode numbers to detect changes
+                try:
+                    previous_stat = previous_file_path.stat()
+                    current_inode = item_stat.st_ino
+                    previous_inode = previous_stat.st_ino
+                    
+                    if current_inode != previous_inode:
+                        change_status = "modified"
+                except (OSError, PermissionError):
+                    pass
         
         items = [{
             "name": browse_path.name,
