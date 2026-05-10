@@ -25,10 +25,13 @@ import {
   TextField,
   Grid,
   Collapse,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import {
   Visibility as VisibilityIcon,
   FilterList as FilterListIcon,
+  ContentCopy as ContentCopyIcon,
 } from '@mui/icons-material';
 import api from '../api';
 
@@ -42,6 +45,7 @@ export default function BackupHistory() {
   const [rowsPerPage, setRowsPerPage] = useState(50);
   const [totalCount, setTotalCount] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
   
   // Filter states
   const [filters, setFilters] = useState({
@@ -162,6 +166,28 @@ export default function BackupHistory() {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
     return `${minutes}m ${remainingSeconds}s`;
+  };
+
+  const formatSnapshotName = (startedAt) => {
+    if (!startedAt) return null;
+    const date = new Date(startedAt);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`;
+  };
+
+  const handleCopySnapshot = async (snapshotName) => {
+    try {
+      await navigator.clipboard.writeText(snapshotName);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
   };
 
   const handleSort = (property) => {
@@ -384,7 +410,30 @@ export default function BackupHistory() {
                 </TableCell>
                 <TableCell>{getStatusChip(entry.status)}</TableCell>
                 <TableCell>
-                  {entry.started_at ? new Date(entry.started_at).toLocaleString() : 'Not started'}
+                  <Box>
+                    <Typography variant="body2">
+                      {entry.started_at ? new Date(entry.started_at).toLocaleString() : 'Not started'}
+                    </Typography>
+                    {entry.started_at && entry.status === 'success' && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+                        <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace', fontSize: '0.7rem' }}>
+                          {formatSnapshotName(entry.started_at)}
+                        </Typography>
+                        <Tooltip title="Copy snapshot folder name">
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCopySnapshot(formatSnapshotName(entry.started_at));
+                            }}
+                            sx={{ padding: '2px', color: '#14b8a6' }}
+                          >
+                            <ContentCopyIcon sx={{ fontSize: '0.9rem' }} />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    )}
+                  </Box>
                 </TableCell>
                 <TableCell>
                   {formatDuration(entry.started_at, entry.completed_at)}
@@ -495,6 +544,17 @@ export default function BackupHistory() {
           <Button onClick={() => setLogDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={copySuccess}
+        autoHideDuration={2000}
+        onClose={() => setCopySuccess(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="success" sx={{ width: '100%' }}>
+          Snapshot folder name copied to clipboard!
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
