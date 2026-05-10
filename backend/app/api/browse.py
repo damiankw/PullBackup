@@ -154,28 +154,32 @@ def browse_snapshot(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid snapshot name")
     
-    # Get previous snapshot if comparison is requested
+    # Get all snapshots sorted by date to find previous snapshot
+    all_snapshots = []
+    if base_backup_dir.exists():
+        for item in base_backup_dir.iterdir():
+            if item.is_dir():
+                try:
+                    datetime.strptime(item.name[:19], '%Y-%m-%d_%H-%M-%S')
+                    all_snapshots.append(item.name)
+                except (ValueError, IndexError):
+                    continue
+    
+    all_snapshots.sort()
+    
+    # Find the snapshot just before the current one
     previous_snapshot_dir = None
-    if compare:
-        # Get all snapshots sorted by date
-        all_snapshots = []
-        if base_backup_dir.exists():
-            for item in base_backup_dir.iterdir():
-                if item.is_dir():
-                    try:
-                        datetime.strptime(item.name[:19], '%Y-%m-%d_%H-%M-%S')
-                        all_snapshots.append(item.name)
-                    except (ValueError, IndexError):
-                        continue
-        
-        all_snapshots.sort()
-        # Find the snapshot just before the current one
-        try:
-            current_index = all_snapshots.index(snapshot_name)
-            if current_index > 0:
-                previous_snapshot_dir = base_backup_dir / all_snapshots[current_index - 1]
-        except ValueError:
-            pass
+    has_previous_snapshot = False
+    try:
+        current_index = all_snapshots.index(snapshot_name)
+        if current_index > 0:
+            previous_snapshot_dir = base_backup_dir / all_snapshots[current_index - 1]
+            has_previous_snapshot = True
+            # Only use previous snapshot for comparison if compare flag is enabled
+            if not compare:
+                previous_snapshot_dir = None
+    except ValueError:
+        pass
     
     # Construct the browse path (sanitize to prevent directory traversal)
     browse_path = snapshot_dir / path.lstrip('/')
@@ -269,7 +273,7 @@ def browse_snapshot(
         "snapshot_name": snapshot_name,
         "current_path": path,
         "items": items,
-        "has_previous_snapshot": previous_snapshot_dir is not None if compare else None
+        "has_previous_snapshot": has_previous_snapshot
     }
 
 
