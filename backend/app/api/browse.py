@@ -15,6 +15,61 @@ from app.services.rsync_service import rsync_service
 router = APIRouter()
 
 
+def _check_directory_for_changes(current_dir: Path, previous_dir: Path, max_depth: int = 10) -> Optional[str]:
+    """
+    Recursively check if a directory contains any new or modified files.
+    
+    Args:
+        current_dir: Current snapshot directory to check
+        previous_dir: Previous snapshot directory to compare against
+        max_depth: Maximum recursion depth to prevent infinite loops
+        
+    Returns:
+        "new" if directory or any content is new
+        "modified" if any content is modified
+        None if no changes detected
+    """
+    if max_depth <= 0:
+        return None
+    
+    # Check if the directory itself is new
+    if not previous_dir.exists():
+        return "new"
+    
+    has_modified = False
+    
+    try:
+        for item in current_dir.iterdir():
+            previous_item = previous_dir / item.name
+            
+            # If item doesn't exist in previous snapshot, it's new
+            if not previous_item.exists():
+                return "new"  # Immediately return "new" if we find any new items
+            
+            if item.is_file():
+                # Compare inode numbers for files
+                try:
+                    current_stat = item.stat()
+                    previous_stat = previous_item.stat()
+                    
+                    if current_stat.st_ino != previous_stat.st_ino:
+                        has_modified = True
+                        # Don't return yet, keep checking for "new" items
+                except (OSError, PermissionError):
+                    pass
+            elif item.is_dir():
+                # Recursively check subdirectory
+                subdir_status = _check_directory_for_changes(item, previous_item, max_depth - 1)
+                if subdir_status == "new":
+                    return "new"  # Propagate "new" immediately
+                elif subdir_status == "modified":
+                    has_modified = True
+    except (OSError, PermissionError):
+        pass
+    
+    return "modified" if has_modified else None
+
+
 @router.get("/backup-jobs/{job_id}/snapshots")
 def list_snapshots(
     job_id: int,
@@ -224,6 +279,9 @@ def browse_snapshot(
                                 change_status = "modified"
                         except (OSError, PermissionError):
                             pass  # If we can't stat previous file, skip comparison
+                    elif item.is_dir():
+                        # For directories, recursively check if they contain any changes
+                        change_status = _check_directory_for_changes(item, previous_item_path)
                 
                 item_info = {
                     "name": item.name,
