@@ -583,41 +583,45 @@ export default function BrowseBackups() {
                       onClick={() => item.type === 'directory' && navigateToFolder(item.path)}
                     >
                       <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          {item.type === 'directory' ? (
-                            <FolderIcon sx={{ mr: 1, color: '#14b8a6' }} />
-                          ) : (
-                            <FileIcon sx={{ mr: 1, color: 'text.secondary' }} />
-                          )}
-                          <span>{item.name}</span>
-                          {item.change_status === 'new' && (
-                            <Chip
-                              icon={<NewIcon />}
-                              label="New"
-                              size="small"
-                              sx={{
-                                backgroundColor: 'rgba(16, 185, 129, 0.2)',
-                                color: '#10b981',
-                                border: '1px solid #10b981',
-                                fontWeight: 600,
-                                fontSize: '0.7rem'
-                              }}
-                            />
-                          )}
-                          {item.change_status === 'modified' && (
-                            <Chip
-                              icon={<EditIcon />}
-                              label="Modified"
-                              size="small"
-                              sx={{
-                                backgroundColor: 'rgba(245, 158, 11, 0.2)',
-                                color: '#f59e0b',
-                                border: '1px solid #f59e0b',
-                                fontWeight: 600,
-                                fontSize: '0.7rem'
-                              }}
-                            />
-                          )}
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {item.type === 'directory' ? (
+                              <FolderIcon sx={{ mr: 1, color: '#14b8a6' }} />
+                            ) : (
+                              <FileIcon sx={{ mr: 1, color: 'text.secondary' }} />
+                            )}
+                            <span>{item.name}</span>
+                          </Box>
+                          <Box>
+                            {item.change_status === 'new' && (
+                              <Chip
+                                icon={<NewIcon />}
+                                label="New"
+                                size="small"
+                                sx={{
+                                  backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                                  color: '#10b981',
+                                  border: '1px solid #10b981',
+                                  fontWeight: 600,
+                                  fontSize: '0.7rem'
+                                }}
+                              />
+                            )}
+                            {item.change_status === 'modified' && (
+                              <Chip
+                                icon={<EditIcon />}
+                                label="Modified"
+                                size="small"
+                                sx={{
+                                  backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                                  color: '#f59e0b',
+                                  border: '1px solid #f59e0b',
+                                  fontWeight: 600,
+                                  fontSize: '0.7rem'
+                                }}
+                              />
+                            )}
+                          </Box>
                         </Box>
                       </TableCell>
                       <TableCell>
