@@ -109,7 +109,8 @@ class RsyncService:
         callback=None,
         backup_uuid: Optional[str] = None,
         job_name: Optional[str] = None,
-        server_name: Optional[str] = None
+        server_name: Optional[str] = None,
+        schedule: Optional[str] = None
     ) -> Tuple[bool, str, dict]:
         """
         Execute incremental rsync backup from remote server to local path.
@@ -126,6 +127,7 @@ class RsyncService:
             backup_uuid: Backup job UUID
             job_name: Job name for README
             server_name: Server name for README
+            schedule: Backup schedule (cron format) for README
         
         Returns:
             Tuple of (success, log_output, stats)
@@ -241,6 +243,23 @@ class RsyncService:
                     log_output += f"\nSpace saved by hardlinks: {self._format_bytes(size_stats['space_saved_bytes'])}"
                     efficiency = (size_stats['space_saved_bytes'] / size_stats['snapshot_total_size_bytes'] * 100) if size_stats['snapshot_total_size_bytes'] > 0 else 0
                     log_output += f"\nSpace efficiency: {efficiency:.1f}%"
+                
+                # Generate/update README.md in backup root directory
+                if job_name and server_name and backup_uuid:
+                    try:
+                        self.generate_readme(
+                            backup_uuid=backup_uuid,
+                            job_name=job_name,
+                            server_name=server_name,
+                            hostname=hostname,
+                            port=port,
+                            username=username,
+                            remote_path=remote_path,
+                            schedule=schedule,
+                            rsync_options=rsync_options
+                        )
+                    except Exception as readme_error:
+                        log_output += f"\nWarning: Failed to generate README.md: {readme_error}"
             else:
                 log_output += f"\n\nRsync failed with exit code {process.returncode}"
                 # Clean up failed snapshot directory

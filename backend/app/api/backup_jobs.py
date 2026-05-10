@@ -279,7 +279,7 @@ def execute_backup(job_id: int, history_id: int):
         server = job.server
         ssh_key_path = server.ssh_key.key_file_path if server.ssh_key else None
         
-        # Execute backup
+        # Execute backup (README will be generated automatically on success)
         success, log_output, stats = rsync_service.execute_backup(
             hostname=server.hostname,
             port=server.port,
@@ -289,22 +289,11 @@ def execute_backup(job_id: int, history_id: int):
             rsync_options=job.rsync_options,
             backup_uuid=job.backup_uuid,
             job_name=job.name,
-            server_name=server.name
+            server_name=server.name,
+            schedule=job.schedule
         )
         
-        # Generate/update README.md after backup
-        if success:
-            rsync_service.generate_readme(
-                backup_uuid=job.backup_uuid,
-                job_name=job.name,
-                server_name=server.name,
-                hostname=server.hostname,
-                port=server.port,
-                username=server.username,
-                remote_path=job.remote_path,
-                schedule=job.schedule,
-                rsync_options=job.rsync_options
-            )
+        # Note: README.md is now generated automatically in execute_backup
         
         # Update history
         history.status = BackupStatus.SUCCESS if success else BackupStatus.FAILED

@@ -34,6 +34,10 @@ import {
   Visibility,
   VisibilityOff,
   Send as SendIcon,
+  Warning as WarningIcon,
+  Error as ErrorIcon,
+  CheckCircle as CheckCircleIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import Users from './Users';
 import api from '../api';
@@ -346,11 +350,14 @@ function EmailSettings() {
 function SystemInfo() {
   const [systemData, setSystemData] = useState(null);
   const [storageData, setStorageData] = useState(null);
+  const [healthData, setHealthData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [healthLoading, setHealthLoading] = useState(false);
 
   useEffect(() => {
     fetchSystemInfo();
     fetchStorageStats();
+    fetchHealthCheck();
   }, []);
 
   const fetchSystemInfo = async () => {
@@ -370,6 +377,18 @@ function SystemInfo() {
       setStorageData(response.data);
     } catch (error) {
       console.error('Failed to fetch storage stats:', error);
+    }
+  };
+
+  const fetchHealthCheck = async () => {
+    setHealthLoading(true);
+    try {
+      const response = await api.get('/system/health-check');
+      setHealthData(response.data);
+    } catch (error) {
+      console.error('Failed to fetch health check:', error);
+    } finally {
+      setHealthLoading(false);
     }
   };
 
@@ -696,6 +715,117 @@ function SystemInfo() {
           </TableContainer>
         </Paper>
       )}
+
+      {/* System Health Check */}
+      <Paper sx={{ p: 3, mb: 4 }}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+          <Typography variant="h5" sx={{ fontWeight: 600 }}>
+            System Health
+          </Typography>
+          <Button
+            startIcon={<RefreshIcon />}
+            onClick={fetchHealthCheck}
+            disabled={healthLoading}
+            size="small"
+          >
+            Refresh
+          </Button>
+        </Box>
+
+        {healthLoading && (
+          <Box display="flex" justifyContent="center" py={4}>
+            <CircularProgress size={30} />
+          </Box>
+        )}
+
+        {!healthLoading && healthData && (
+          <>
+            {/* Overall Status */}
+            <Box mb={3}>
+              <Alert
+                severity={
+                  healthData.status === 'healthy' ? 'success' :
+                  healthData.status === 'degraded' ? 'warning' :
+                  'error'
+                }
+                icon={
+                  healthData.status === 'healthy' ? <CheckCircleIcon /> :
+                  healthData.status === 'degraded' ? <WarningIcon /> :
+                  <ErrorIcon />
+                }
+              >
+                <Typography variant="body2" fontWeight={600}>
+                  {healthData.status === 'healthy' && 'All systems operational'}
+                  {healthData.status === 'degraded' && `${healthData.total_warnings} warning(s) detected`}
+                  {healthData.status === 'unhealthy' && `${healthData.critical_count} critical issue(s) detected`}
+                </Typography>
+                <Typography variant="caption">
+                  Last checked: {new Date(healthData.timestamp).toLocaleString()}
+                </Typography>
+              </Alert>
+            </Box>
+
+            {/* Critical Issues */}
+            {healthData.issues && healthData.issues.length > 0 && (
+              <Box mb={3}>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: '#ef4444' }}>
+                  <ErrorIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                  Critical Issues ({healthData.issues.length})
+                </Typography>
+                {healthData.issues.map((issue, index) => (
+                  <Alert key={index} severity="error" sx={{ mb: 2 }}>
+                    <Typography variant="body2" fontWeight={600} gutterBottom>
+                      {issue.message}
+                    </Typography>
+                    {issue.suggestion && (
+                      <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                        <strong>Suggestion:</strong> {issue.suggestion}
+                      </Typography>
+                    )}
+                    {issue.last_error && (
+                      <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+                        <strong>Last Error:</strong> {issue.last_error}
+                      </Typography>
+                    )}
+                  </Alert>
+                ))}
+              </Box>
+            )}
+
+            {/* Warnings */}
+            {healthData.warnings && healthData.warnings.length > 0 && (
+              <Box mb={3}>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: '#f59e0b' }}>
+                  <WarningIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                  Warnings ({healthData.warnings.length})
+                </Typography>
+                {healthData.warnings.map((warning, index) => (
+                  <Alert key={index} severity="warning" sx={{ mb: 2 }}>
+                    <Typography variant="body2" fontWeight={600} gutterBottom>
+                      {warning.message}
+                    </Typography>
+                    {warning.suggestion && (
+                      <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                        <strong>Suggestion:</strong> {warning.suggestion}
+                      </Typography>
+                    )}
+                  </Alert>
+                ))}
+              </Box>
+            )}
+
+            {/* Health Summary */}
+            {healthData.status === 'healthy' && healthData.issues.length === 0 && healthData.warnings.length === 0 && (
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  All {healthData.active_jobs_checked} active backup job(s) are healthy.
+                  No missed backups or failures detected.
+                </Typography>
+              </Box>
+            )}
+          </>
+        )}
+      </Paper>
     </Box>
   );
 }

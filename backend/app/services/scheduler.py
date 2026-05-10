@@ -20,15 +20,41 @@ def execute_scheduled_backup(backup_job_id: int):
     This must be a module-level function (not a class method) so APScheduler
     can serialize it for persistent job storage.
     """
+    import os
+    import signal
+    from pathlib import Path
+    
     logger.info(f"Executing scheduled backup for job {backup_job_id}")
     
     db = SessionLocal()
+    history = None
+    backup_job = None
+    
     try:
-        # Get backup job
+        # Get backup job first, before creating history
         backup_job = db.query(BackupJob).filter(BackupJob.id == backup_job_id).first()
         if not backup_job or not backup_job.is_active:
             logger.warning(f"Backup job {backup_job_id} not found or inactive")
             return
+        
+        # PRE-FLIGHT CHECK: Test storage availability before creating history
+        backup_root = Path("/backups")
+        storage_available = False
+        storage_error = None
+        
+        try:
+            # Quick check: does path exist and is writable?
+            if not backup_root.exists():
+                storage_error = "Backup path does not exist"
+            else:
+                # Try to write a test file with timeout
+                test_file = backup_root / f".health_check_{backup_job_id}"
+                test_file.write_text("test")
+                test_file.unlink()
+                storage_available = True
+        except Exception as check_error:
+            storage_error = str(check_error)
+            logger.error(f"Storage pre-check failed for job {backup_job_id}: {storage_error}")
         
         # Create history entry
         history = BackupHistory(
@@ -40,23 +66,69 @@ def execute_scheduled_backup(backup_job_id: int):
         db.add(history)
         db.commit()
         db.refresh(history)
+        logger.info(f"Created backup history entry {history.id} for job {backup_job_id}")
+        
+        # If storage check failed, mark as failed immediately
+        if not storage_available:
+            history.status = BackupStatus.FAILED
+            history.completed_at = datetime.now()
+            history.error_message = f"Storage unavailable: {storage_error}"
+            history.log_output = f"Pre-flight storage check failed.\n\nThe backup storage at /backups is not accessible. This usually indicates:\n- NAS is offline\n- Mount point is unavailable\n- Network storage disconnected\n\nError: {storage_error}"
+            db.commit()
+            logger.error(f"Backup job {backup_job_id} aborted - storage unavailable: {storage_error}")
+            return
         
         # Get server info
         server = backup_job.server
         ssh_key_path = server.ssh_key.key_file_path if server.ssh_key else None
         
-        # Execute backup
-        success, log_output, stats = rsync_service.execute_backup(
-            hostname=server.hostname,
-            port=server.port,
-            username=server.username,
-            remote_path=backup_job.remote_path,
-            ssh_key_path=ssh_key_path,
-            rsync_options=backup_job.rsync_options,
-            backup_uuid=backup_job.backup_uuid,
-            job_name=backup_job.name,
-            server_name=server.name
-        )
+        # Execute backup with timeout protection
+        success = False
+        log_output = ""
+        stats = {}
+        
+        try:
+            # Set a timeout for the backup execution (e.g., 4 hours max)
+            # This prevents hung jobs from blocking future backups
+            import signal
+            import functools
+            
+            def timeout_handler(signum, frame):
+                raise TimeoutError("Backup execution timed out")
+            
+            # Note: signal.alarm only works on Unix, not Windows
+            # Set 4 hour timeout (14400 seconds)
+            old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(14400)  # 4 hours
+            
+            try:
+                success, log_output, stats = rsync_service.execute_backup(
+                    hostname=server.hostname,
+                    port=server.port,
+                    username=server.username,
+                    remote_path=backup_job.remote_path,
+                    ssh_key_path=ssh_key_path,
+                    rsync_options=backup_job.rsync_options,
+                    backup_uuid=backup_job.backup_uuid,
+                    job_name=backup_job.name,
+                    server_name=server.name,
+                    schedule=backup_job.schedule
+                )
+            finally:
+                # Cancel the alarm
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old_handler)
+                
+        except TimeoutError as timeout_error:
+            success = False
+            log_output = f"Backup execution timed out after 4 hours. This usually indicates:\n- Storage became unavailable during backup\n- Network connection lost\n- rsync process hung\n\nThe backup was aborted to prevent blocking future backups."
+            stats = {'bytes_transferred': 0, 'files_transferred': 0, 'snapshot_size_bytes': 0, 'snapshot_total_size_bytes': 0, 'space_saved_bytes': 0}
+            logger.error(f"Backup job {backup_job_id} timed out after 4 hours")
+        except Exception as exec_error:
+            success = False
+            log_output = f"Backup execution error: {str(exec_error)}"
+            stats = {'bytes_transferred': 0, 'files_transferred': 0, 'snapshot_size_bytes': 0, 'snapshot_total_size_bytes': 0, 'space_saved_bytes': 0}
+            logger.error(f"Backup job {backup_job_id} execution error: {exec_error}")
         
         # Update history
         history.status = BackupStatus.SUCCESS if success else BackupStatus.FAILED
@@ -124,24 +196,43 @@ def execute_scheduled_backup(backup_job_id: int):
             logger.error(f"Failed to send email notification: {email_error}")
         
     except Exception as e:
-        logger.error(f"Error executing scheduled backup {backup_job_id}: {str(e)}")
+        logger.error(f"Error executing scheduled backup {backup_job_id}: {str(e)}", exc_info=True)
         
-        # Update history with error
+        # Try to create/update failure record
         try:
-            history = db.query(BackupHistory).filter(
-                BackupHistory.backup_job_id == backup_job_id,
-                BackupHistory.status == BackupStatus.RUNNING
-            ).order_by(BackupHistory.created_at.desc()).first()
-            
-            if history:
+            if history and history.id:
+                # History exists in DB, update it
                 history.status = BackupStatus.FAILED
                 history.completed_at = datetime.now()
-                history.error_message = str(e)
+                history.error_message = f"Backup execution failed: {str(e)}"
                 db.commit()
-        except Exception:
-            pass
+            else:
+                # History doesn't exist or wasn't committed, create new one
+                failure_history = BackupHistory(
+                    backup_job_id=backup_job_id,
+                    status=BackupStatus.FAILED,
+                    started_at=datetime.now(),
+                    completed_at=datetime.now(),
+                    triggered_by='schedule',
+                    error_message=f"Backup failed to start: {str(e)}",
+                    log_output=f"Error: {str(e)}\n\nThis backup failed before execution could begin. This may indicate storage or database connectivity issues."
+                )
+                db.add(failure_history)
+                db.commit()
+                logger.info(f"Created failure history record for job {backup_job_id}")
+        except Exception as db_error:
+            # Even creating failure record failed - log to application logs
+            logger.critical(
+                f"CRITICAL: Backup job {backup_job_id} failed AND could not record failure in database! "
+                f"Original error: {str(e)}, Database error: {str(db_error)}. "
+                f"This indicates a serious storage or database connectivity issue.",
+                exc_info=True
+            )
     finally:
-        db.close()
+        try:
+            db.close()
+        except Exception:
+            pass  # If even closing fails, we can't do much
 
 
 class BackupScheduler:
@@ -189,7 +280,10 @@ class BackupScheduler:
                 args=[backup_job_id],
                 id=job_id,
                 name=f"Backup Job {backup_job_id}",
-                replace_existing=True
+                replace_existing=True,
+                misfire_grace_time=3600,  # Allow up to 1 hour late execution
+                coalesce=True,  # If multiple runs were missed, only execute once
+                max_instances=1  # Only one instance of this specific job at a time
             )
             
             logger.info(f"Added scheduled job for backup {backup_job_id} with schedule: {schedule}")
@@ -227,6 +321,27 @@ class BackupScheduler:
         
         db = SessionLocal()
         try:
+            # Clean up stuck RUNNING jobs from previous crashes/hangs
+            from datetime import timedelta
+            stale_threshold = datetime.now() - timedelta(hours=6)  # Jobs running >6 hours are stuck
+            
+            stuck_jobs = db.query(BackupHistory).filter(
+                BackupHistory.status == BackupStatus.RUNNING,
+                BackupHistory.started_at < stale_threshold
+            ).all()
+            
+            for stuck_job in stuck_jobs:
+                logger.warning(f"Found stuck RUNNING job {stuck_job.id} from {stuck_job.started_at}, marking as FAILED")
+                stuck_job.status = BackupStatus.FAILED
+                stuck_job.completed_at = datetime.now()
+                stuck_job.error_message = "Job was stuck in RUNNING state (likely hung on storage I/O). Marked as failed on scheduler restart."
+                if not stuck_job.log_output:
+                    stuck_job.log_output = "This backup was aborted because it was stuck in RUNNING state for more than 6 hours. This typically happens when storage becomes unavailable during execution."
+            
+            if stuck_jobs:
+                db.commit()
+                logger.info(f"Cleaned up {len(stuck_jobs)} stuck backup job(s)")
+            
             # Get all active backup jobs with schedules
             backup_jobs = db.query(BackupJob).filter(
                 BackupJob.is_active == True,

@@ -5,6 +5,7 @@ import os
 import shutil
 import psutil
 from datetime import datetime, timedelta
+from croniter import croniter
 
 from app.core.database import get_db
 from app.api.deps import get_current_active_user
@@ -206,3 +207,175 @@ def reload_scheduler(
             status_code=500,
             detail=f"Failed to reload scheduler: {str(e)}"
         )
+
+
+@router.get("/health-check")
+def health_check(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Check for backup health issues including missed scheduled backups.
+    Detects when scheduled backups should have run but didn't create history records.
+    """
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    issues = []
+    warnings = []
+    
+    # Check for stuck RUNNING jobs
+    stuck_threshold = now - timedelta(hours=6)
+    stuck_jobs = db.query(BackupHistory).filter(
+        BackupHistory.status == 'RUNNING',
+        BackupHistory.started_at < stuck_threshold
+    ).all()
+    
+    for stuck in stuck_jobs:
+        job = db.query(BackupJob).filter(BackupJob.id == stuck.backup_job_id).first()
+        hours_stuck = (now - stuck.started_at).total_seconds() / 3600
+        
+        issues.append({
+            "type": "stuck_running",
+            "severity": "critical",
+            "job_id": stuck.backup_job_id,
+            "job_name": job.name if job else f"Job {stuck.backup_job_id}",
+            "history_id": stuck.id,
+            "message": f"Backup job '{job.name if job else stuck.backup_job_id}' has been stuck in RUNNING state for {hours_stuck:.1f} hours since {stuck.started_at.strftime('%Y-%m-%d %H:%M:%S')}.",
+            "started_at": stuck.started_at.isoformat(),
+            "hours_stuck": round(hours_stuck, 1),
+            "suggestion": "This backup likely hung due to storage becoming unavailable. Reload the scheduler from Settings to clean up stuck jobs."
+        })
+    
+    # Check for active jobs with schedules
+    active_jobs = db.query(BackupJob).filter(
+        BackupJob.is_active == True,
+        BackupJob.schedule.isnot(None)
+    ).all()
+    
+    now = datetime.now()
+    
+    for job in active_jobs:
+        # Get next run time from scheduler
+        next_run = backup_scheduler.get_next_run_time(job.id)
+        
+        if not next_run and job.last_run:
+            # Job is scheduled but not in scheduler - possible issue
+            warnings.append({
+                "type": "job_not_scheduled",
+                "severity": "warning",
+                "job_id": job.id,
+                "job_name": job.name,
+                "message": f"Job '{job.name}' is marked as active with schedule '{job.schedule}' but is not in the scheduler. Last run: {job.last_run}",
+                "suggestion": "Try reloading the scheduler from System Info page."
+            })
+        
+        # Check for missed backups (no history in expected time window)
+        if job.last_run:
+            # Parse cron schedule to estimate expected interval
+            from croniter import croniter
+            try:
+                cron = croniter(job.schedule, job.last_run)
+                expected_next_run = cron.get_next(datetime)
+                
+                # If we're past the expected next run by more than 1 hour, and no recent history
+                if now > expected_next_run + timedelta(hours=1):
+                    # Check if there's a history record after the expected next run
+                    recent_history = db.query(BackupHistory).filter(
+                        BackupHistory.backup_job_id == job.id,
+                        BackupHistory.started_at >= expected_next_run
+                    ).first()
+                    
+                    if not recent_history:
+                        time_since_last = now - job.last_run
+                        hours_overdue = (now - expected_next_run).total_seconds() / 3600
+                        
+                        issues.append({
+                            "type": "missed_backup",
+                            "severity": "critical" if hours_overdue > 24 else "warning",
+                            "job_id": job.id,
+                            "job_name": job.name,
+                            "message": f"Job '{job.name}' has not run since {job.last_run.strftime('%Y-%m-%d %H:%M:%S')} ({time_since_last.days} days, {time_since_last.seconds // 3600} hours ago). Expected to run at {expected_next_run.strftime('%Y-%m-%d %H:%M:%S')}.",
+                            "last_run": job.last_run.isoformat(),
+                            "expected_next_run": expected_next_run.isoformat(),
+                            "hours_overdue": round(hours_overdue, 1),
+                            "suggestion": "Check if storage is available and scheduler is running. Try manually executing the backup."
+                        })
+            except Exception as cron_error:
+                warnings.append({
+                    "type": "invalid_schedule",
+                    "severity": "warning",
+                    "job_id": job.id,
+                    "job_name": job.name,
+                    "message": f"Cannot parse schedule '{job.schedule}' for job '{job.name}': {str(cron_error)}",
+                    "suggestion": "Check the cron expression format."
+                })
+        elif job.schedule:
+            # Job has never run but has a schedule
+            warnings.append({
+                "type": "never_run",
+                "severity": "info",
+                "job_id": job.id,
+                "job_name": job.name,
+                "message": f"Job '{job.name}' is scheduled but has never run.",
+                "next_run": next_run.isoformat() if next_run else None,
+                "suggestion": "Job will run at next scheduled time or can be triggered manually."
+            })
+    
+    # Check for consecutive failures
+    for job in active_jobs:
+        # Get last 3 backup attempts
+        recent_attempts = db.query(BackupHistory).filter(
+            BackupHistory.backup_job_id == job.id
+        ).order_by(BackupHistory.started_at.desc()).limit(3).all()
+        
+        if len(recent_attempts) >= 3:
+            all_failed = all(h.status == 'FAILED' for h in recent_attempts)
+            if all_failed:
+                issues.append({
+                    "type": "consecutive_failures",
+                    "severity": "critical",
+                    "job_id": job.id,
+                    "job_name": job.name,
+                    "message": f"Job '{job.name}' has failed the last {len(recent_attempts)} consecutive attempts.",
+                    "last_error": recent_attempts[0].error_message if recent_attempts[0].error_message else "No error message",
+                    "suggestion": "Check error logs and verify server connectivity and storage availability."
+                })
+    
+    # Check storage availability
+    backup_path = "/backups"
+    storage_available = True
+    storage_error = None
+    
+    try:
+        if os.path.exists(backup_path):
+            # Try to create a test file
+            test_file = os.path.join(backup_path, ".health_check")
+            with open(test_file, 'w') as f:
+                f.write("health check")
+            os.remove(test_file)
+        else:
+            storage_available = False
+            storage_error = "Backup path does not exist"
+    except Exception as e:
+        storage_available = False
+        storage_error = str(e)
+    
+    if not storage_available:
+        issues.append({
+            "type": "storage_unavailable",
+            "severity": "critical",
+            "message": f"Backup storage at {backup_path} is not available: {storage_error}",
+            "suggestion": "Check if NAS is mounted and accessible. Backups will fail until storage is restored."
+        })
+    
+    return {
+        "status": "healthy" if len(issues) == 0 else "degraded" if len([i for i in issues if i['severity'] == 'critical']) == 0 else "unhealthy",
+        "timestamp": now.isoformat(),
+        "issues": issues,
+        "warnings": warnings,
+        "total_issues": len(issues),
+        "total_warnings": len(warnings),
+        "critical_count": len([i for i in issues if i['severity'] == 'critical']),
+        "active_jobs_checked": len(active_jobs)
+    }
