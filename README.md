@@ -198,6 +198,49 @@ PullBackup
 - Check destination directory is writable
 - Review SSH key permissions
 
+## Versioning
+
+This project uses [Semantic Versioning](https://semver.org/) with automated releases via [Semantic Release](https://semantic-release.gitbook.io/).
+
+### Commit Message Convention
+
+We follow [Conventional Commits](https://www.conventionalcommits.org/) for commit messages:
+
+```bash
+# Patch release (bug fixes)
+git commit -m "fix: resolve login timeout issue"
+
+# Minor release (new features)
+git commit -m "feat: add audit logging system"
+
+# Major release (breaking changes)
+git commit -m "feat: redesign API
+
+BREAKING CHANGE: all endpoints now require authentication"
+```
+
+**Commit Types:**
+- `feat:` - New feature (minor version bump)
+- `fix:` - Bug fix (patch version bump)
+- `docs:` - Documentation changes
+- `style:` - Code style changes (formatting)
+- `refactor:` - Code refactoring
+- `test:` - Adding or updating tests
+- `chore:` - Maintenance tasks (no release)
+
+See [COMMIT_CONVENTION.md](COMMIT_CONVENTION.md) for detailed guidelines.
+
+### Automated Releases
+
+When commits are pushed to `main`:
+1. Semantic Release analyzes commit messages
+2. Determines next version number (based on commit types)
+3. Generates CHANGELOG.md
+4. Creates GitHub release with notes
+5. Tags the commit with version number
+
+No manual version updates needed!
+
 ## Contributing
 
 Contributions are welcome! Please submit pull requests or open issues.
