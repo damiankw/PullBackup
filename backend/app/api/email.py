@@ -125,7 +125,7 @@ def update_email_settings(
     return settings_dict
 
 
-@router.post("/test")
+@router.post("/test/")
 def send_test_email(
     test_request: EmailTestRequest,
     current_user: User = Depends(get_current_active_user),
