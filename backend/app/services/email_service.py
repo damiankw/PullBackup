@@ -22,7 +22,7 @@ class EmailService:
         """Get email settings from database."""
         return self.db.query(EmailSettings).first()
     
-    def send_email(self, to: List[str], subject: str, body_html: str, body_text: Optional[str] = None) -> bool:
+    def send_email(self, to: List[str], subject: str, body_html: str, body_text: Optional[str] = None) -> tuple[bool, Optional[str]]:
         """
         Send an email using configured SMTP settings.
         
@@ -33,17 +33,17 @@ class EmailService:
             body_text: Plain text body content (optional)
         
         Returns:
-            True if email sent successfully, False otherwise
+            Tuple of (success: bool, error_message: Optional[str])
         """
         settings = self.get_settings()
         
         if not settings or not settings.is_enabled:
             print("Email notifications are disabled")
-            return False
+            return False, "Email notifications are disabled"
         
         if not to:
             print("No recipients specified")
-            return False
+            return False, "No recipients specified"
         
         try:
             # Create message
@@ -61,29 +61,44 @@ class EmailService:
             msg.attach(part2)
             
             # Connect to SMTP server
+            print(f"Connecting to SMTP server: {settings.smtp_host}:{settings.smtp_port}")
+            print(f"Using SSL: {settings.smtp_use_ssl}, Using TLS: {settings.smtp_use_tls}")
+            
             if settings.smtp_use_ssl:
-                server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port)
+                server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=10)
             else:
-                server = smtplib.SMTP(settings.smtp_host, settings.smtp_port)
+                server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10)
                 if settings.smtp_use_tls:
                     server.starttls()
             
             # Login if credentials provided
             if settings.smtp_username and settings.smtp_password:
+                print(f"Logging in with username: {settings.smtp_username}")
                 server.login(settings.smtp_username, settings.smtp_password)
+            else:
+                print("No credentials provided, sending without authentication")
             
             # Send email
             server.sendmail(settings.from_email, to, msg.as_string())
             server.quit()
             
             print(f"Email sent successfully to {', '.join(to)}")
-            return True
+            return True, None
             
+        except smtplib.SMTPAuthenticationError as e:
+            error_msg = f"Authentication failed: {str(e)}"
+            print(f"Failed to send email: {error_msg}")
+            return False, error_msg
+        except smtplib.SMTPException as e:
+            error_msg = f"SMTP error: {str(e)}"
+            print(f"Failed to send email: {error_msg}")
+            return False, error_msg
         except Exception as e:
-            print(f"Failed to send email: {e}")
-            return False
+            error_msg = f"Error: {str(e)}"
+            print(f"Failed to send email: {error_msg}")
+            return False, error_msg
     
-    def send_test_email(self, recipient: str) -> bool:
+    def send_test_email(self, recipient: str) -> tuple[bool, Optional[str]]:
         """Send a test email to verify configuration."""
         subject = "PullBackup - Test Email"
         
@@ -253,4 +268,5 @@ class EmailService:
         
         body_text += "\n\nThis is an automated notification from PullBackup."
         
-        return self.send_email(recipients, subject, body_html, body_text)
+        success, _ = self.send_email(recipients, subject, body_html, body_text)
+        return success

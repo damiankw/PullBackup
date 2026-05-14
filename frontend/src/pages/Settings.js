@@ -65,6 +65,7 @@ function EmailSettings() {
   const [sendingTest, setSendingTest] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [showPassword, setShowPassword] = useState(false);
+  const [hasPassword, setHasPassword] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -73,7 +74,11 @@ function EmailSettings() {
   const fetchSettings = async () => {
     try {
       const response = await api.get('/email/');
-      setSettings(response.data);
+      const data = response.data;
+      // Track if password exists on server (it will be null in response)
+      setHasPassword(data.smtp_password === null && data.smtp_username);
+      // Set empty string for password field (backend returns null for security)
+      setSettings({ ...data, smtp_password: '' });
     } catch (error) {
       console.error('Failed to fetch email settings:', error);
       setMessage({ type: 'error', text: 'Failed to load email settings' });
@@ -91,8 +96,18 @@ function EmailSettings() {
     setMessage({ type: '', text: '' });
     
     try {
-      const response = await api.put('/email/', settings);
-      setSettings(response.data);
+      // Only send password if it's been changed (not empty)
+      const updateData = { ...settings };
+      if (!updateData.smtp_password) {
+        delete updateData.smtp_password;
+      } else {
+        // User entered a new password
+        setHasPassword(true);
+      }
+      
+      const response = await api.put('/email/', updateData);
+      // Set empty string for password field (backend returns null for security)
+      setSettings({ ...response.data, smtp_password: '' });
       setMessage({ type: 'success', text: 'Email settings saved successfully' });
     } catch (error) {
       console.error('Failed to save email settings:', error);
@@ -197,7 +212,8 @@ function EmailSettings() {
               type={showPassword ? 'text' : 'password'}
               value={settings?.smtp_password || ''}
               onChange={(e) => handleChange('smtp_password', e.target.value)}
-              placeholder="Enter password to change"
+              placeholder={hasPassword && !settings?.smtp_password ? "Password is set (enter new to change)" : "Enter password"}
+              helperText={hasPassword && !settings?.smtp_password ? "Leave empty to keep current password" : ""}
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">

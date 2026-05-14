@@ -46,11 +46,26 @@ def get_email_settings(
         db.commit()
         db.refresh(settings)
     
-    # Don't expose password in response
-    if settings.smtp_password:
-        settings.smtp_password = "********"
+    # Return settings without password for security
+    settings_dict = {
+        'id': settings.id,
+        'smtp_host': settings.smtp_host,
+        'smtp_port': settings.smtp_port,
+        'smtp_username': settings.smtp_username,
+        'smtp_password': None,  # Never send password back
+        'smtp_use_tls': settings.smtp_use_tls,
+        'smtp_use_ssl': settings.smtp_use_ssl,
+        'from_email': settings.from_email,
+        'from_name': settings.from_name,
+        'notify_on_success': settings.notify_on_success,
+        'notify_on_failure': settings.notify_on_failure,
+        'notify_recipients': settings.notify_recipients,
+        'is_enabled': settings.is_enabled,
+        'created_at': settings.created_at,
+        'updated_at': settings.updated_at,
+    }
     
-    return settings
+    return settings_dict
 
 
 @router.put("/", response_model=EmailSettingsSchema)
@@ -78,8 +93,8 @@ def update_email_settings(
     # Update only provided fields
     update_data = settings_update.dict(exclude_unset=True)
     
-    # Don't update password if it's the masked value
-    if 'smtp_password' in update_data and update_data['smtp_password'] == "********":
+    # Don't update password if it's None or empty (means user didn't change it)
+    if 'smtp_password' in update_data and not update_data['smtp_password']:
         del update_data['smtp_password']
     
     for field, value in update_data.items():
@@ -88,11 +103,26 @@ def update_email_settings(
     db.commit()
     db.refresh(settings)
     
-    # Mask password in response
-    if settings.smtp_password:
-        settings.smtp_password = "********"
+    # Return settings without password for security
+    settings_dict = {
+        'id': settings.id,
+        'smtp_host': settings.smtp_host,
+        'smtp_port': settings.smtp_port,
+        'smtp_username': settings.smtp_username,
+        'smtp_password': None,  # Never send password back
+        'smtp_use_tls': settings.smtp_use_tls,
+        'smtp_use_ssl': settings.smtp_use_ssl,
+        'from_email': settings.from_email,
+        'from_name': settings.from_name,
+        'notify_on_success': settings.notify_on_success,
+        'notify_on_failure': settings.notify_on_failure,
+        'notify_recipients': settings.notify_recipients,
+        'is_enabled': settings.is_enabled,
+        'created_at': settings.created_at,
+        'updated_at': settings.updated_at,
+    }
     
-    return settings
+    return settings_dict
 
 
 @router.post("/test")
@@ -107,12 +137,12 @@ def send_test_email(
     
     email_service = EmailService(db)
     
-    success = email_service.send_test_email(test_request.recipient)
+    success, error_msg = email_service.send_test_email(test_request.recipient)
     
     if success:
         return {"message": f"Test email sent successfully to {test_request.recipient}"}
     else:
         raise HTTPException(
             status_code=500,
-            detail="Failed to send test email. Please check your email configuration and logs."
+            detail=error_msg or "Failed to send test email. Please check your email configuration."
         )
