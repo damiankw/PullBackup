@@ -145,7 +145,7 @@ class EmailService:
             return False
         
         # Check if we should notify for this status
-        is_success = backup_history.status.value == 'completed'
+        is_success = backup_history.status.value == 'success'
         if is_success and not settings.notify_on_success:
             return False
         if not is_success and not settings.notify_on_failure:
