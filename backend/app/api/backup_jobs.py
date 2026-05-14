@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 from datetime import datetime
 
 from app.core.database import get_db
 from app.api.deps import get_current_active_user
-from app.models.models import User, BackupJob, BackupHistory, BackupStatus, Server, Snapshot
+from app.models.models import User, BackupJob, BackupHistory, BackupStatus, Server, Snapshot, AuditAction
 from app.schemas.schemas import (
     BackupJobCreate, BackupJobUpdate, BackupJob as BackupJobSchema,
     BackupJobWithHistory
@@ -13,6 +13,7 @@ from app.schemas.schemas import (
 from app.services.scheduler import backup_scheduler
 from app.services.rsync_service import rsync_service
 from app.services.email_service import EmailService
+from app.services.audit_service import audit_service
 
 router = APIRouter()
 
@@ -32,12 +33,25 @@ def list_backup_jobs(
         query = query.filter(BackupJob.owner_id == current_user.id)
     
     jobs = query.offset(skip).limit(limit).all()
+    
+    # Add last_status for each job by querying the most recent backup_history
+    for job in jobs:
+        last_backup = db.query(BackupHistory).filter(
+            BackupHistory.backup_job_id == job.id
+        ).order_by(BackupHistory.started_at.desc()).first()
+        
+        if last_backup:
+            job.last_status = last_backup.status.value
+        else:
+            job.last_status = None
+    
     return jobs
 
 
 @router.post("/", response_model=BackupJobSchema, status_code=status.HTTP_201_CREATED)
 def create_backup_job(
     job_data: BackupJobCreate,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -71,6 +85,18 @@ def create_backup_job(
             db.commit()
             db.refresh(backup_job)
     
+    # Log audit event
+    audit_service.log_from_request(
+        db=db,
+        request=request,
+        action=AuditAction.CREATE,
+        user=current_user,
+        resource_type="backup_job",
+        resource_id=backup_job.id,
+        resource_name=backup_job.name,
+        description=f"Created backup job '{backup_job.name}' for server '{server.name}'"
+    )
+    
     return backup_job
 
 
@@ -103,6 +129,7 @@ def get_backup_job(
 def update_backup_job(
     job_id: int,
     job_data: BackupJobUpdate,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -136,6 +163,13 @@ def update_backup_job(
                 detail="Not authorized to use this server"
             )
     
+    # Track changes for audit log
+    changes = []
+    for field, value in job_data.dict(exclude_unset=True).items():
+        old_value = getattr(job, field)
+        if old_value != value:
+            changes.append(f"{field}: {old_value} -> {value}")
+    
     # Update fields
     schedule_updated = False
     for field, value in job_data.dict(exclude_unset=True).items():
@@ -166,12 +200,26 @@ def update_backup_job(
         db.commit()
         db.refresh(job)
     
+    # Log audit event
+    if changes:
+        audit_service.log_from_request(
+            db=db,
+            request=request,
+            action=AuditAction.UPDATE,
+            user=current_user,
+            resource_type="backup_job",
+            resource_id=job.id,
+            resource_name=job.name,
+            description=f"Updated backup job '{job.name}': {', '.join(changes)}"
+        )
+    
     return job
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_backup_job(
     job_id: int,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -191,12 +239,27 @@ def delete_backup_job(
             detail="Not authorized to delete this backup job"
         )
     
+    # Store job info before deletion
+    job_name = job.name
+    
     # Remove from scheduler
     backup_scheduler.remove_job(job.id)
     
     # Delete job
     db.delete(job)
     db.commit()
+    
+    # Log audit event
+    audit_service.log_from_request(
+        db=db,
+        request=request,
+        action=AuditAction.DELETE,
+        user=current_user,
+        resource_type="backup_job",
+        resource_id=job_id,
+        resource_name=job_name,
+        description=f"Deleted backup job '{job_name}'"
+    )
     
     return None
 
@@ -205,6 +268,7 @@ def delete_backup_job(
 async def run_backup_job(
     job_id: int,
     background_tasks: BackgroundTasks,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -235,6 +299,18 @@ async def run_backup_job(
             status_code=status.HTTP_409_CONFLICT,
             detail="Backup is already running for this job"
         )
+    
+    # Log audit event
+    audit_service.log_from_request(
+        db=db,
+        request=request,
+        action=AuditAction.EXECUTE,
+        user=current_user,
+        resource_type="backup_job",
+        resource_id=job.id,
+        resource_name=job.name,
+        description=f"Manually triggered backup job '{job.name}'"
+    )
     
     # Create history entry
     history = BackupHistory(

@@ -1,14 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from typing import List
 
 from app.core.database import get_db
 from app.api.deps import get_current_active_user, get_current_admin_user
-from app.models.models import User, Server
+from app.models.models import User, Server, AuditAction
 from app.schemas.schemas import (
     ServerCreate, ServerUpdate, Server as ServerSchema, ServerWithJobs
 )
 from app.services.rsync_service import rsync_service
+from app.services.audit_service import audit_service
 from datetime import datetime
 
 router = APIRouter()
@@ -35,6 +36,7 @@ def list_servers(
 @router.post("/", response_model=ServerSchema, status_code=status.HTTP_201_CREATED)
 def create_server(
     server_data: ServerCreate,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -53,6 +55,18 @@ def create_server(
     db.add(server)
     db.commit()
     db.refresh(server)
+    
+    # Log audit event
+    audit_service.log_from_request(
+        db=db,
+        request=request,
+        action=AuditAction.CREATE,
+        user=current_user,
+        resource_type="server",
+        resource_id=server.id,
+        resource_name=server.name,
+        description=f"Created server '{server.name}' ({server.hostname})"
+    )
     
     return server
 
@@ -86,6 +100,7 @@ def get_server(
 def update_server(
     server_id: int,
     server_data: ServerUpdate,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -115,6 +130,13 @@ def update_server(
                 detail="SSH key not found"
             )
     
+    # Track what changed for audit log
+    changes = []
+    for field, value in server_data.dict(exclude_unset=True).items():
+        old_value = getattr(server, field)
+        if old_value != value:
+            changes.append(f"{field}: {old_value} -> {value}")
+    
     # Update fields
     for field, value in server_data.dict(exclude_unset=True).items():
         setattr(server, field, value)
@@ -122,12 +144,26 @@ def update_server(
     db.commit()
     db.refresh(server)
     
+    # Log audit event
+    if changes:
+        audit_service.log_from_request(
+            db=db,
+            request=request,
+            action=AuditAction.UPDATE,
+            user=current_user,
+            resource_type="server",
+            resource_id=server.id,
+            resource_name=server.name,
+            description=f"Updated server '{server.name}': {', '.join(changes)}"
+        )
+    
     return server
 
 
 @router.delete("/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_server(
     server_id: int,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -147,8 +183,24 @@ def delete_server(
             detail="Not authorized to delete this server"
         )
     
+    # Store server info before deletion
+    server_name = server.name
+    server_hostname = server.hostname
+    
     db.delete(server)
     db.commit()
+    
+    # Log audit event
+    audit_service.log_from_request(
+        db=db,
+        request=request,
+        action=AuditAction.DELETE,
+        user=current_user,
+        resource_type="server",
+        resource_id=server_id,
+        resource_name=server_name,
+        description=f"Deleted server '{server_name}' ({server_hostname})"
+    )
     
     return None
 

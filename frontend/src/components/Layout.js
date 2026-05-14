@@ -30,6 +30,7 @@ import {
   Person as PersonIcon,
   FolderOpen as FolderOpenIcon,
   KeyboardArrowUp as KeyboardArrowUpIcon,
+  Security as SecurityIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../AuthContext';
 
@@ -42,6 +43,7 @@ const menuItems = [
   { text: 'Backup Jobs', icon: <BackupIcon />, path: '/backup-jobs' },
   { text: 'History', icon: <HistoryIcon />, path: '/backup-history' },
   { text: 'Browse Backups', icon: <FolderOpenIcon />, path: '/browse' },
+  { text: 'Audit Logs', icon: <SecurityIcon />, path: '/audit-logs', adminOnly: true },
   { text: 'Settings', icon: <SettingsIcon />, path: '/settings', adminOnly: true },
 ];
 

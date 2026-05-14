@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from typing import List
 
 from app.core.database import get_db
 from app.api.deps import get_current_active_user
-from app.models.models import User, SSHKey
+from app.models.models import User, SSHKey, AuditAction
 from app.schemas.schemas import SSHKeyCreate, SSHKeyUpdate, SSHKey as SSHKeySchema
 from app.services.rsync_service import rsync_service
+from app.services.audit_service import audit_service
 
 router = APIRouter()
 
@@ -31,6 +32,7 @@ def list_ssh_keys(
 @router.post("/", response_model=SSHKeySchema, status_code=status.HTTP_201_CREATED)
 def create_ssh_key(
     key_data: SSHKeyCreate,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -58,6 +60,18 @@ def create_ssh_key(
         db.add(ssh_key)
         db.commit()
         db.refresh(ssh_key)
+        
+        # Log audit event
+        audit_service.log_from_request(
+            db=db,
+            request=request,
+            action=AuditAction.CREATE,
+            user=current_user,
+            resource_type="ssh_key",
+            resource_id=ssh_key.id,
+            resource_name=ssh_key.name,
+            description=f"Created SSH key '{ssh_key.name}' (fingerprint: {fingerprint})"
+        )
         
         return ssh_key
         
@@ -105,6 +119,7 @@ def get_ssh_key(
 def update_ssh_key(
     key_id: int,
     key_update: SSHKeyUpdate,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -121,9 +136,22 @@ def update_ssh_key(
         )
     
     # Update the is_public field
+    old_public = key.is_public
     key.is_public = key_update.is_public
     db.commit()
     db.refresh(key)
+    
+    # Log audit event
+    audit_service.log_from_request(
+        db=db,
+        request=request,
+        action=AuditAction.UPDATE,
+        user=current_user,
+        resource_type="ssh_key",
+        resource_id=key.id,
+        resource_name=key.name,
+        description=f"Changed SSH key visibility from {'public' if old_public else 'private'} to {'public' if key.is_public else 'private'}"
+    )
     
     return key
 
@@ -131,6 +159,7 @@ def update_ssh_key(
 @router.delete("/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_ssh_key(
     key_id: int,
+    request: Request,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -156,11 +185,26 @@ def delete_ssh_key(
             detail=f"Cannot delete key: {servers_using_key} server(s) are using it"
         )
     
+    # Store key name before deletion
+    key_name = key.name
+    
     # Delete key file
     rsync_service.delete_ssh_key(key.key_file_path)
     
     # Delete database record
     db.delete(key)
     db.commit()
+    
+    # Log audit event
+    audit_service.log_from_request(
+        db=db,
+        request=request,
+        action=AuditAction.DELETE,
+        user=current_user,
+        resource_type="ssh_key",
+        resource_id=key_id,
+        resource_name=key_name,
+        description=f"Deleted SSH key '{key_name}'"
+    )
     
     return None

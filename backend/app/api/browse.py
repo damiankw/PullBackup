@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
@@ -9,8 +9,9 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.api.deps import get_current_active_user
-from app.models.models import User, BackupJob, UserRole, Snapshot
+from app.models.models import User, BackupJob, UserRole, Snapshot, AuditAction
 from app.services.rsync_service import rsync_service
+from app.services.audit_service import audit_service
 
 router = APIRouter()
 
@@ -406,6 +407,7 @@ def download_file(
     job_id: int,
     snapshot_name: str,
     path: str,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -442,6 +444,18 @@ def download_file(
     if not file_path.is_file():
         raise HTTPException(status_code=400, detail="Path is not a file")
     
+    # Log audit event
+    audit_service.log_from_request(
+        db=db,
+        request=request,
+        action=AuditAction.DOWNLOAD,
+        user=current_user,
+        resource_type="file",
+        resource_id=job_id,
+        resource_name=file_path.name,
+        description=f"Downloaded file '{path}' from snapshot '{snapshot_name}' of backup job '{job.name}'"
+    )
+    
     # Return file
     try:
         with open(file_path, 'rb') as f:
@@ -463,6 +477,7 @@ def download_folder_zip(
     job_id: int,
     snapshot_name: str,
     path: str = "",
+    request: Request = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -498,6 +513,19 @@ def download_folder_zip(
     
     if not folder_path.is_dir():
         raise HTTPException(status_code=400, detail="Path is not a directory")
+    
+    # Log audit event
+    if request:
+        audit_service.log_from_request(
+            db=db,
+            request=request,
+            action=AuditAction.DOWNLOAD,
+            user=current_user,
+            resource_type="folder",
+            resource_id=job_id,
+            resource_name=folder_path.name or snapshot_name,
+            description=f"Downloaded folder '{path or '/'}' as ZIP from snapshot '{snapshot_name}' of backup job '{job.name}'"
+        )
     
     # Create zip file in memory
     zip_buffer = io.BytesIO()

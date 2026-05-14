@@ -14,6 +14,7 @@ import BackupHistory from './pages/BackupHistory';
 import BrowseBackups from './pages/BrowseBackups';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
+import AuditLogs from './pages/AuditLogs';
 import Layout from './components/Layout';
 
 const theme = createTheme({
@@ -208,6 +209,7 @@ function App() {
               <Route path="backup-jobs" element={<BackupJobs />} />
               <Route path="backup-history" element={<BackupHistory />} />
               <Route path="browse" element={<BrowseBackups />} />
+              <Route path="audit-logs" element={<AuditLogs />} />
               <Route path="settings" element={<Settings />} />
               <Route path="profile" element={<Profile />} />
             </Route>

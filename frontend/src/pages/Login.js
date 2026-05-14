@@ -146,12 +146,13 @@ export default function Login() {
                 required
                 fullWidth
                 id="username"
-                label="Username"
+                label="Email or Username"
                 name="username"
                 autoComplete="username"
                 autoFocus
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                helperText="You can log in with either your email address or username"
                 sx={{
                   mb: 2,
                   '& .MuiOutlinedInput-root': {

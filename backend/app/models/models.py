@@ -19,6 +19,16 @@ class BackupStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
+class AuditAction(str, enum.Enum):
+    LOGIN = "login"
+    LOGOUT = "logout"
+    CREATE = "create"
+    UPDATE = "update"
+    DELETE = "delete"
+    DOWNLOAD = "download"
+    EXECUTE = "execute"
+
+
 class User(Base):
     __tablename__ = "users"
     
@@ -155,3 +165,22 @@ class EmailSettings(Base):
     is_enabled = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Nullable for failed login attempts
+    username = Column(String(100), nullable=True)  # Store username for failed login attempts
+    action = Column(Enum(AuditAction), nullable=False, index=True)
+    resource_type = Column(String(50), nullable=True, index=True)  # e.g., "server", "ssh_key", "backup_job"
+    resource_id = Column(Integer, nullable=True)  # ID of the resource affected
+    resource_name = Column(String(255), nullable=True)  # Name/identifier of the resource
+    description = Column(Text, nullable=True)  # Additional details about the action
+    ip_address = Column(String(45), nullable=True)  # Support IPv6
+    user_agent = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    
+    # Relationships
+    user = relationship("User", backref="audit_logs")

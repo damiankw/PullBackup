@@ -205,6 +205,7 @@ class BackupJob(BackupJobBase):
     id: int
     is_active: bool
     last_run: Optional[datetime] = None
+    last_status: Optional[str] = None
     next_run: Optional[datetime] = None
     owner_id: int
     created_at: datetime
@@ -306,3 +307,31 @@ class EmailSettings(EmailSettingsBase):
 
 class EmailTestRequest(BaseModel):
     recipient: str
+
+
+# Audit Log Schemas
+class AuditAction(str, Enum):
+    LOGIN = "login"
+    LOGOUT = "logout"
+    CREATE = "create"
+    UPDATE = "update"
+    DELETE = "delete"
+    DOWNLOAD = "download"
+    EXECUTE = "execute"
+
+
+class AuditLogResponse(BaseModel):
+    id: int
+    user_id: Optional[int] = None
+    username: Optional[str] = None
+    action: AuditAction
+    resource_type: Optional[str] = None
+    resource_id: Optional[int] = None
+    resource_name: Optional[str] = None
+    description: Optional[str] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True

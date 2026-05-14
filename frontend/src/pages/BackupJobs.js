@@ -323,6 +323,11 @@ export default function BackupJobs() {
       bValue = bValue ? new Date(bValue).getTime() : 0;
     }
     
+    if (orderBy === 'last_status') {
+      aValue = aValue || '';
+      bValue = bValue || '';
+    }
+    
     if (orderBy === 'is_active') {
       aValue = aValue ? 1 : 0;
       bValue = bValue ? 1 : 0;
@@ -415,6 +420,15 @@ export default function BackupJobs() {
               </TableCell>
               <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>
                 <TableSortLabel
+                  active={orderBy === 'last_status'}
+                  direction={orderBy === 'last_status' ? order : 'asc'}
+                  onClick={() => handleSort('last_status')}
+                >
+                  Last Result
+                </TableSortLabel>
+              </TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>
+                <TableSortLabel
                   active={orderBy === 'is_active'}
                   direction={orderBy === 'is_active' ? order : 'asc'}
                   onClick={() => handleSort('is_active')}
@@ -448,6 +462,48 @@ export default function BackupJobs() {
                 <TableCell>{formatSchedule(job.schedule)}</TableCell>
                 <TableCell sx={{ fontSize: '0.875rem' }}>
                   {job.last_run ? new Date(job.last_run).toLocaleString() : 'Never'}
+                </TableCell>
+                <TableCell>
+                  {job.last_status ? (
+                    <Chip
+                      label={job.last_status.charAt(0).toUpperCase() + job.last_status.slice(1)}
+                      size="small"
+                      sx={{
+                        background: job.last_status === 'success' 
+                          ? 'rgba(16, 185, 129, 0.2)'
+                          : job.last_status === 'failed'
+                          ? 'rgba(239, 68, 68, 0.2)'
+                          : job.last_status === 'running'
+                          ? 'rgba(59, 130, 246, 0.2)'
+                          : 'rgba(148, 163, 184, 0.1)',
+                        border: job.last_status === 'success'
+                          ? '1px solid rgba(16, 185, 129, 0.3)'
+                          : job.last_status === 'failed'
+                          ? '1px solid rgba(239, 68, 68, 0.3)'
+                          : job.last_status === 'running'
+                          ? '1px solid rgba(59, 130, 246, 0.3)'
+                          : '1px solid rgba(148, 163, 184, 0.2)',
+                        color: job.last_status === 'success'
+                          ? '#10b981'
+                          : job.last_status === 'failed'
+                          ? '#ef4444'
+                          : job.last_status === 'running'
+                          ? '#3b82f6'
+                          : 'text.secondary',
+                        fontWeight: 600,
+                      }}
+                    />
+                  ) : (
+                    <Chip
+                      label="None"
+                      size="small"
+                      sx={{
+                        background: 'rgba(148, 163, 184, 0.1)',
+                        border: '1px solid rgba(148, 163, 184, 0.2)',
+                        color: 'text.secondary',
+                      }}
+                    />
+                  )}
                 </TableCell>
                 <TableCell>
                   {job.is_active ? (
