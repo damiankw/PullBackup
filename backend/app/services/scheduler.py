@@ -21,7 +21,6 @@ def execute_scheduled_backup(backup_job_id: int):
     can serialize it for persistent job storage.
     """
     import os
-    import signal
     from pathlib import Path
     
     logger.info(f"Executing scheduled backup for job {backup_job_id}")
@@ -82,48 +81,24 @@ def execute_scheduled_backup(backup_job_id: int):
         server = backup_job.server
         ssh_key_path = server.ssh_key.key_file_path if server.ssh_key else None
         
-        # Execute backup with timeout protection
+        # Execute backup
         success = False
         log_output = ""
         stats = {}
         
         try:
-            # Set a timeout for the backup execution (e.g., 4 hours max)
-            # This prevents hung jobs from blocking future backups
-            import signal
-            import functools
-            
-            def timeout_handler(signum, frame):
-                raise TimeoutError("Backup execution timed out")
-            
-            # Note: signal.alarm only works on Unix, not Windows
-            # Set 4 hour timeout (14400 seconds)
-            old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(14400)  # 4 hours
-            
-            try:
-                success, log_output, stats = rsync_service.execute_backup(
-                    hostname=server.hostname,
-                    port=server.port,
-                    username=server.username,
-                    remote_path=backup_job.remote_path,
-                    ssh_key_path=ssh_key_path,
-                    rsync_options=backup_job.rsync_options,
-                    backup_uuid=backup_job.backup_uuid,
-                    job_name=backup_job.name,
-                    server_name=server.name,
-                    schedule=backup_job.schedule
-                )
-            finally:
-                # Cancel the alarm
-                signal.alarm(0)
-                signal.signal(signal.SIGALRM, old_handler)
-                
-        except TimeoutError as timeout_error:
-            success = False
-            log_output = f"Backup execution timed out after 4 hours. This usually indicates:\n- Storage became unavailable during backup\n- Network connection lost\n- rsync process hung\n\nThe backup was aborted to prevent blocking future backups."
-            stats = {'bytes_transferred': 0, 'files_transferred': 0, 'snapshot_size_bytes': 0, 'snapshot_total_size_bytes': 0, 'space_saved_bytes': 0}
-            logger.error(f"Backup job {backup_job_id} timed out after 4 hours")
+            success, log_output, stats = rsync_service.execute_backup(
+                hostname=server.hostname,
+                port=server.port,
+                username=server.username,
+                remote_path=backup_job.remote_path,
+                ssh_key_path=ssh_key_path,
+                rsync_options=backup_job.rsync_options,
+                backup_uuid=backup_job.backup_uuid,
+                job_name=backup_job.name,
+                server_name=server.name,
+                schedule=backup_job.schedule
+            )
         except Exception as exec_error:
             success = False
             log_output = f"Backup execution error: {str(exec_error)}"
