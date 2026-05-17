@@ -5,6 +5,7 @@ import logging
 
 from app.core.database import engine, Base
 from app.core.config import settings
+from app.core.migrations import run_migrations
 from app.api import auth, servers, ssh_keys, backup_jobs, backup_history, dashboard, users, browse, system, email, audit
 from app.services.scheduler import backup_scheduler
 
@@ -21,6 +22,9 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     logger.info("Starting PullBackup application")
+    
+    # Run database migrations first
+    run_migrations()
     
     # Create database tables
     Base.metadata.create_all(bind=engine)
