@@ -406,13 +406,21 @@ class RsyncService:
                 'space_saved_bytes': 0
             }
     
-    def save_ssh_key(self, key_name: str, private_key_content: str, owner_id: int) -> str:
+    def save_ssh_key(self, key_name: str, private_key_content: str, owner_id: int, public_key_content: Optional[str] = None) -> tuple[str, Optional[str]]:
         """
-        Save SSH private key to disk.
+        Save SSH private key to disk and optionally save public key.
         Supports RSA, OpenSSH, EC, and DSA key formats.
         
+        Args:
+            key_name: Name for the key
+            private_key_content: Private key content
+            owner_id: ID of the user owning the key
+            public_key_content: Optional public key content
+        
         Returns:
-            Path to saved key file
+            Tuple of (private_key_path, public_key_content)
+            If public_key_content is provided, it's returned as-is.
+            If not provided, attempts to generate it from the private key.
         
         Raises:
             ValueError: If the key format is not recognized
@@ -448,7 +456,13 @@ class RsyncService:
         key_file.write_text(key_content_stripped + '\n')
         os.chmod(key_file, 0o600)
         
-        return str(key_file)
+        # Handle public key
+        final_public_key = public_key_content
+        if not final_public_key:
+            # Try to generate public key from private key
+            final_public_key = self.generate_public_key(str(key_file))
+        
+        return str(key_file), final_public_key
     
     def delete_ssh_key(self, key_file_path: str) -> bool:
         """Delete SSH key file."""
@@ -472,6 +486,29 @@ class RsyncService:
                 parts = result.stdout.split()
                 if len(parts) >= 2:
                     return parts[1]
+            return None
+        except Exception:
+            return None
+    
+    def generate_public_key(self, private_key_path: str) -> Optional[str]:
+        """
+        Generate public key from private key file.
+        
+        Args:
+            private_key_path: Path to private key file
+            
+        Returns:
+            Public key content as string, or None if generation fails
+        """
+        try:
+            result = subprocess.run(
+                ["ssh-keygen", "-y", "-f", private_key_path],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                return result.stdout.strip()
             return None
         except Exception:
             return None

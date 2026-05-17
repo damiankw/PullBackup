@@ -27,6 +27,9 @@ import {
   Public as PublicIcon,
   Lock as LockIcon,
   SwapHoriz as SwapIcon,
+  ContentCopy as ContentCopyIcon,
+  Visibility as VisibilityIcon,
+  AutoAwesome as GenerateIcon,
 } from '@mui/icons-material';
 import api from '../api';
 import { useAuth } from '../AuthContext';
@@ -34,11 +37,13 @@ import { useAuth } from '../AuthContext';
 export default function SSHKeys() {
   const [keys, setKeys] = useState([]);
   const [open, setOpen] = useState(false);
+  const [publicKeyDialog, setPublicKeyDialog] = useState({ open: false, key: null });
   const [orderBy, setOrderBy] = useState('name');
   const [order, setOrder] = useState('asc');
   const [formData, setFormData] = useState({
     name: '',
     private_key: '',
+    public_key: '',
     is_public: false,
   });
   const { user } = useAuth();
@@ -57,7 +62,7 @@ export default function SSHKeys() {
   };
 
   const handleOpen = () => {
-    setFormData({ name: '', private_key: '', is_public: false });
+    setFormData({ name: '', private_key: '', public_key: '', is_public: false });
     setOpen(true);
   };
 
@@ -99,6 +104,28 @@ export default function SSHKeys() {
       } catch (error) {
         console.error('Failed to update SSH key:', error);
         alert('Failed to update SSH key: ' + (error.response?.data?.detail || error.message));
+      }
+    }
+  };
+
+  const handleViewPublicKey = (key) => {
+    setPublicKeyDialog({ open: true, key });
+  };
+
+  const handleCopyPublicKey = (publicKey) => {
+    navigator.clipboard.writeText(publicKey);
+    alert('Public key copied to clipboard!');
+  };
+
+  const handleGeneratePublicKey = async (key) => {
+    if (window.confirm(`Generate public key for "${key.name}"?\n\nThis will extract the public key from the private key file.`)) {
+      try {
+        const response = await api.post(`/ssh-keys/${key.id}/generate-public-key`);
+        fetchKeys();
+        alert('Public key generated successfully!');
+      } catch (error) {
+        console.error('Failed to generate public key:', error);
+        alert('Failed to generate public key: ' + (error.response?.data?.detail || error.message));
       }
     }
   };
@@ -212,8 +239,53 @@ export default function SSHKeys() {
                       >
                         <SwapIcon />
                       </IconButton>
+                      {key.public_key_content ? (
+                        <>
+                          <IconButton 
+                            size="small" 
+                            onClick={() => handleViewPublicKey(key)}
+                            title="View public key"
+                          >
+                            <VisibilityIcon />
+                          </IconButton>
+                          <IconButton 
+                            size="small" 
+                            onClick={() => handleCopyPublicKey(key.public_key_content)}
+                            title="Copy public key"
+                          >
+                            <ContentCopyIcon />
+                          </IconButton>
+                        </>
+                      ) : (
+                        <IconButton 
+                          size="small" 
+                          onClick={() => handleGeneratePublicKey(key)}
+                          title="Generate public key"
+                          color="primary"
+                        >
+                          <GenerateIcon />
+                        </IconButton>
+                      )}
                       <IconButton size="small" onClick={() => handleDelete(key.id)}>
                         <DeleteIcon />
+                      </IconButton>
+                    </>
+                  )}
+                  {key.owner_id !== user?.id && key.public_key_content && (
+                    <>
+                      <IconButton 
+                        size="small" 
+                        onClick={() => handleViewPublicKey(key)}
+                        title="View public key"
+                      >
+                        <VisibilityIcon />
+                      </IconButton>
+                      <IconButton 
+                        size="small" 
+                        onClick={() => handleCopyPublicKey(key.public_key_content)}
+                        title="Copy public key"
+                      >
+                        <ContentCopyIcon />
                       </IconButton>
                     </>
                   )}
@@ -248,6 +320,20 @@ export default function SSHKeys() {
               style: { fontFamily: 'monospace', fontSize: '0.85rem' }
             }}
           />
+          <TextField
+            margin="dense"
+            label="Public Key (Optional)"
+            fullWidth
+            multiline
+            rows={4}
+            value={formData.public_key}
+            onChange={(e) => setFormData({ ...formData, public_key: e.target.value })}
+            placeholder="ssh-rsa AAAAB3NzaC1yc2E... or ssh-ed25519 AAAAC3NzaC1lZDI1NTE5..."
+            InputProps={{
+              style: { fontFamily: 'monospace', fontSize: '0.85rem' }
+            }}
+            helperText="If not provided, the public key will be automatically generated from the private key"
+          />
           <Typography variant="caption" color="textSecondary" display="block" gutterBottom>
             Paste your SSH private key. Supported formats: RSA, OpenSSH, EC (Ed25519), DSA, and PKCS#8
           </Typography>
@@ -274,6 +360,44 @@ export default function SSHKeys() {
           <Button onClick={handleClose}>Cancel</Button>
           <Button onClick={handleSubmit} variant="contained">
             Add Key
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Public Key View Dialog */}
+      <Dialog 
+        open={publicKeyDialog.open} 
+        onClose={() => setPublicKeyDialog({ open: false, key: null })} 
+        maxWidth="md" 
+        fullWidth
+      >
+        <DialogTitle>
+          Public Key - {publicKeyDialog.key?.name}
+        </DialogTitle>
+        <DialogContent>
+          <TextField
+            fullWidth
+            multiline
+            rows={6}
+            value={publicKeyDialog.key?.public_key_content || ''}
+            InputProps={{
+              readOnly: true,
+              style: { fontFamily: 'monospace', fontSize: '0.85rem' }
+            }}
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            You can copy this public key and add it to authorized_keys on your servers
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => handleCopyPublicKey(publicKeyDialog.key?.public_key_content)}
+            startIcon={<ContentCopyIcon />}
+          >
+            Copy to Clipboard
+          </Button>
+          <Button onClick={() => setPublicKeyDialog({ open: false, key: null })}>
+            Close
           </Button>
         </DialogActions>
       </Dialog>

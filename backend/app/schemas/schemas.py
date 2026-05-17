@@ -70,15 +70,18 @@ class SSHKeyBase(BaseModel):
 
 class SSHKeyCreate(SSHKeyBase):
     private_key: str
+    public_key: Optional[str] = None
 
 
 class SSHKeyUpdate(BaseModel):
-    is_public: bool
+    is_public: Optional[bool] = None
+    public_key: Optional[str] = None
 
 
 class SSHKey(SSHKeyBase):
     id: int
     fingerprint: Optional[str] = None
+    public_key_content: Optional[str] = None
     created_at: datetime
     owner_id: int
     

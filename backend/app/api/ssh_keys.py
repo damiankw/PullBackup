@@ -36,13 +36,14 @@ def create_ssh_key(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Upload and save SSH private key."""
+    """Upload and save SSH private key (and optionally public key)."""
     try:
-        # Save key to disk
-        key_file_path = rsync_service.save_ssh_key(
+        # Save key to disk and get/generate public key
+        key_file_path, public_key_content = rsync_service.save_ssh_key(
             key_name=key_data.name,
             private_key_content=key_data.private_key,
-            owner_id=current_user.id
+            owner_id=current_user.id,
+            public_key_content=key_data.public_key
         )
         
         # Get fingerprint
@@ -53,6 +54,7 @@ def create_ssh_key(
             name=key_data.name,
             fingerprint=fingerprint,
             key_file_path=key_file_path,
+            public_key_content=public_key_content,
             is_public=key_data.is_public,
             owner_id=current_user.id
         )
@@ -123,7 +125,7 @@ def update_ssh_key(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Update SSH key visibility (public/private)."""
+    """Update SSH key (visibility and/or public key)."""
     key = db.query(SSHKey).filter(
         SSHKey.id == key_id,
         SSHKey.owner_id == current_user.id
@@ -135,23 +137,39 @@ def update_ssh_key(
             detail="SSH key not found or you don't have permission to modify it"
         )
     
-    # Update the is_public field
-    old_public = key.is_public
-    key.is_public = key_update.is_public
+    changes = []
+    
+    # Update public key if provided
+    if key_update.public_key is not None:
+        old_public_key_exists = key.public_key_content is not None
+        key.public_key_content = key_update.public_key
+        if old_public_key_exists:
+            changes.append("updated public key")
+        else:
+            changes.append("added public key")
+    
+    # Update the is_public field if provided
+    if key_update.is_public is not None:
+        old_public = key.is_public
+        key.is_public = key_update.is_public
+        if old_public != key.is_public:
+            changes.append(f"visibility: {'public' if old_public else 'private'} -> {'public' if key.is_public else 'private'}")
+    
     db.commit()
     db.refresh(key)
     
-    # Log audit event
-    audit_service.log_from_request(
-        db=db,
-        request=request,
-        action=AuditAction.UPDATE,
-        user=current_user,
-        resource_type="ssh_key",
-        resource_id=key.id,
-        resource_name=key.name,
-        description=f"Changed SSH key visibility from {'public' if old_public else 'private'} to {'public' if key.is_public else 'private'}"
-    )
+    # Log audit event if changes were made
+    if changes:
+        audit_service.log_from_request(
+            db=db,
+            request=request,
+            action=AuditAction.UPDATE,
+            user=current_user,
+            resource_type="ssh_key",
+            resource_id=key.id,
+            resource_name=key.name,
+            description=f"Updated SSH key: {', '.join(changes)}"
+        )
     
     return key
 
@@ -208,3 +226,51 @@ def delete_ssh_key(
     )
     
     return None
+
+
+@router.post("/{key_id}/generate-public-key", response_model=SSHKeySchema)
+def generate_public_key_for_key(
+    key_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Generate public key from private key file."""
+    key = db.query(SSHKey).filter(
+        SSHKey.id == key_id,
+        SSHKey.owner_id == current_user.id
+    ).first()
+    
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="SSH key not found or you don't have permission to modify it"
+        )
+    
+    # Generate public key from private key
+    public_key = rsync_service.generate_public_key(key.key_file_path)
+    
+    if not public_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate public key from private key"
+        )
+    
+    # Update the key with the generated public key
+    key.public_key_content = public_key
+    db.commit()
+    db.refresh(key)
+    
+    # Log audit event
+    audit_service.log_from_request(
+        db=db,
+        request=request,
+        action=AuditAction.UPDATE,
+        user=current_user,
+        resource_type="ssh_key",
+        resource_id=key.id,
+        resource_name=key.name,
+        description=f"Generated public key for SSH key '{key.name}'"
+    )
+    
+    return key
