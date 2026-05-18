@@ -6,14 +6,12 @@ import logging
 from app.core.database import engine, Base
 from app.core.config import settings
 from app.core.migrations import run_migrations
+from app.core.logging_config import setup_logging
 from app.api import auth, servers, ssh_keys, backup_jobs, backup_history, dashboard, users, browse, system, email, audit
 from app.services.scheduler import backup_scheduler
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO if not settings.DEBUG else logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Configure logging with timestamps
+setup_logging(debug=settings.DEBUG)
 logger = logging.getLogger(__name__)
 
 
@@ -88,4 +86,11 @@ def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    from app.core.logging_config import get_logging_config
+    
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        log_config=get_logging_config(debug=settings.DEBUG)
+    )
