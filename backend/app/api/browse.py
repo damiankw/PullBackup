@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
+import logging
 from pathlib import Path
 import zipfile
 import io
@@ -14,6 +15,7 @@ from app.services.rsync_service import rsync_service
 from app.services.audit_service import audit_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _check_directory_for_changes(current_dir: Path, previous_dir: Path, max_depth: int = 10) -> Optional[str]:
@@ -258,7 +260,14 @@ def browse_snapshot(
         try:
             for item in sorted(browse_path.iterdir()):
                 relative_path = str(item.relative_to(snapshot_dir))
-                item_stat = item.stat()
+                
+                # Get file stats with error handling for NFS/disappeared files
+                try:
+                    item_stat = item.stat()
+                except (FileNotFoundError, OSError) as stat_error:
+                    # File disappeared or NFS error - skip this item
+                    logger.debug(f"Skipping {item}: {stat_error}")
+                    continue
                 
                 # Determine change status if comparison is enabled
                 change_status = None

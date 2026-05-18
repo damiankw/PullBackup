@@ -46,11 +46,34 @@ def execute_scheduled_backup(backup_job_id: int):
             if not backup_root.exists():
                 storage_error = "Backup path does not exist"
             else:
-                # Try to write a test file with timeout
-                test_file = backup_root / f".health_check_{backup_job_id}"
-                test_file.write_text("test")
-                test_file.unlink()
-                storage_available = True
+                # Try to write a test file with timeout (5 second max)
+                # If NFS is hung, this will timeout instead of blocking forever
+                import signal
+                import threading
+                
+                test_result = {'success': False, 'error': None}
+                
+                def storage_check():
+                    try:
+                        test_file = backup_root / f".health_check_{backup_job_id}"
+                        test_file.write_text("test")
+                        test_file.unlink()
+                        test_result['success'] = True
+                    except Exception as e:
+                        test_result['error'] = str(e)
+                
+                check_thread = threading.Thread(target=storage_check)
+                check_thread.daemon = True
+                check_thread.start()
+                check_thread.join(timeout=5.0)  # 5 second timeout
+                
+                if check_thread.is_alive():
+                    # Timeout - storage is hung
+                    storage_error = "Storage check timed out (NFS/storage may be hung)"
+                elif test_result['success']:
+                    storage_available = True
+                else:
+                    storage_error = test_result['error'] or "Storage check failed"
         except Exception as check_error:
             storage_error = str(check_error)
             logger.error(f"Storage pre-check failed for job {backup_job_id}: {storage_error}")

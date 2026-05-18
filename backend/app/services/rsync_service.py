@@ -173,8 +173,8 @@ class RsyncService:
                 relative_link_path = f"../{previous_snapshot.name}"
                 cmd.append(f"--link-dest={relative_link_path}")
             
-            # Add SSH options
-            ssh_cmd = f"ssh -p {port} -o StrictHostKeyChecking=no"
+            # Add SSH options with timeout
+            ssh_cmd = f"ssh -p {port} -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
             if ssh_key_path:
                 os.chmod(ssh_key_path, 0o600)
                 ssh_cmd += f" -i {ssh_key_path}"
@@ -202,13 +202,33 @@ class RsyncService:
                 universal_newlines=True
             )
             
-            # Read output line by line
-            for line in process.stdout:
-                log_lines.append(line.rstrip())
-                if callback:
-                    callback(line.rstrip())
+            # Read output line by line with timeout
+            # Set rsync timeout: 4 hours max (14400 seconds)
+            # This prevents hanging on stalled NFS mounts
+            rsync_timeout = 14400  # 4 hours
             
-            process.wait()
+            try:
+                for line in process.stdout:
+                    log_lines.append(line.rstrip())
+                    if callback:
+                        callback(line.rstrip())
+                
+                # Wait for process with timeout
+                process.wait(timeout=rsync_timeout)
+            except subprocess.TimeoutExpired:
+                # Kill the process if it times out
+                process.kill()
+                process.wait()  # Clean up zombie process
+                error_msg = f"Backup timed out after {rsync_timeout/3600:.1f} hours. This usually indicates:\n- NFS mount is hung/stalled\n- Network storage is unresponsive\n- SSH connection dropped without closing\n\nConsider checking storage availability."
+                log_lines.append(error_msg)
+                return False, '\n'.join(log_lines), {
+                    'bytes_transferred': 0,
+                    'files_transferred': 0,
+                    'snapshot_size_bytes': 0,
+                    'snapshot_total_size_bytes': 0,
+                    'space_saved_bytes': 0
+                }
+            
             end_time = datetime.now()
             
             log_output = '\n'.join(log_lines)
