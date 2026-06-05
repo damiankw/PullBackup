@@ -22,23 +22,30 @@ export default function TerminalPage() {
     try {
       if (xtermRef.current) {
         t.open(xtermRef.current);
-
-        // Try an initial fit, but only if container has size
         const el = xtermRef.current;
-        if (el.clientWidth > 0 && el.clientHeight > 0) {
-          try { fit.fit(); } catch (e) { console.warn('xterm fit() failed:', e); }
-        }
+
+        const maybeFit = () => {
+          const fitLocal = fit;
+          if (!fitLocal) return;
+          // guard internal xterm core/viewport presence to avoid reading `dimensions`
+          try {
+            const core = t && t._core;
+            const viewport = core && core.viewport;
+            if (viewport && typeof viewport.dimensions !== 'undefined' && el.clientWidth > 0 && el.clientHeight > 0) {
+              fitLocal.fit();
+            }
+          } catch (err) {
+            // swallow transient errors
+          }
+        };
+
+        // initial attempt
+        maybeFit();
 
         // Observe size changes and call fit when the terminal container is visible
         if (typeof ResizeObserver !== 'undefined') {
           const ro = new ResizeObserver(() => {
-            try {
-              if (el.clientWidth > 0 && el.clientHeight > 0) {
-                fit.fit();
-              }
-            } catch (e) {
-              // ignore
-            }
+            try { maybeFit(); } catch (e) {}
           });
           ro.observe(el);
           resizeObserverRef.current = ro;
@@ -54,9 +61,13 @@ export default function TerminalPage() {
     const handleResize = () => {
       const fit = fitAddonRef.current;
       const el = xtermRef.current;
-      if (!fit || !el) return;
+      if (!fit || !el || !term) return;
       try {
-        if (el.clientWidth > 0 && el.clientHeight > 0) fit.fit();
+        const core = term && term._core;
+        const viewport = core && core.viewport;
+        if (viewport && typeof viewport.dimensions !== 'undefined' && el.clientWidth > 0 && el.clientHeight > 0) {
+          fit.fit();
+        }
       } catch (e) {}
     };
 
