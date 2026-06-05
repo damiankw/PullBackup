@@ -103,6 +103,13 @@ export default function TerminalPage() {
     api.get('/servers/').then(res => setServers(res.data)).catch(() => setServers([]));
   }, []);
 
+  // auto-select first server when servers list loads
+  useEffect(() => {
+    if (servers && servers.length && !selected) {
+      setSelected(servers[0].id);
+    }
+  }, [servers]);
+
   const connect = () => {
     if (!selected) return;
     const t = createTerminal();
