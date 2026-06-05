@@ -29,6 +29,7 @@ import {
   Settings as SettingsIcon,
   Person as PersonIcon,
   FolderOpen as FolderOpenIcon,
+  Terminal as TerminalIcon,
   KeyboardArrowUp as KeyboardArrowUpIcon,
   Security as SecurityIcon,
 } from '@mui/icons-material';
@@ -43,6 +44,7 @@ const menuItems = [
   { text: 'Backup Jobs', icon: <BackupIcon />, path: '/backup-jobs' },
   { text: 'History', icon: <HistoryIcon />, path: '/backup-history' },
   { text: 'Browse Backups', icon: <FolderOpenIcon />, path: '/browse' },
+  { text: 'Terminal', icon: <TerminalIcon />, path: '/terminal' },
   { text: 'Audit Logs', icon: <SecurityIcon />, path: '/audit-logs', adminOnly: true },
   { text: 'Settings', icon: <SettingsIcon />, path: '/settings', adminOnly: true },
 ];

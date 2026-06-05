@@ -7,7 +7,7 @@ from app.core.database import engine, Base
 from app.core.config import settings
 from app.core.migrations import run_migrations
 from app.core.logging_config import setup_logging
-from app.api import auth, servers, ssh_keys, backup_jobs, backup_history, dashboard, users, browse, system, email, audit
+from app.api import auth, servers, ssh_keys, backup_jobs, backup_history, dashboard, users, browse, system, email, audit, terminal
 from app.services.scheduler import backup_scheduler
 
 # Configure logging with timestamps
@@ -66,6 +66,7 @@ app.include_router(browse.router, prefix="/api/browse", tags=["Browse Backups"])
 app.include_router(system.router, prefix="/api/system", tags=["System"])
 app.include_router(email.router, prefix="/api/email", tags=["Email"])
 app.include_router(audit.router, prefix="/api/audit-logs", tags=["Audit Logs"])
+app.include_router(terminal.router, prefix="/api/terminal", tags=["Terminal"])
 
 
 @app.get("/")
