@@ -17,18 +17,33 @@ export default function TerminalPage() {
     const t = new XTerm({ cols: 80, rows: 24 });
     const fit = new FitAddon();
     t.loadAddon(fit);
-    t.open(xtermRef.current);
-    fit.fit();
+    // open terminal when the ref is available
+    try {
+      if (xtermRef.current) {
+        t.open(xtermRef.current);
+        // fit may throw if terminal/core isn't ready; guard it
+        try { fit.fit(); } catch (e) { console.warn('xterm fit() failed:', e); }
+      }
+    } catch (e) {
+      console.warn('Failed to open xterm:', e);
+    }
+
     setTerm(t);
     fitAddonRef.current = fit;
 
     const handleResize = () => {
-      try { fit.fit(); } catch (e) {}
+      if (!fitAddonRef.current) return;
+      try {
+        fitAddonRef.current.fit();
+      } catch (e) {
+        // ignore transient fit errors (e.g., terminal not yet attached)
+      }
     };
+
     window.addEventListener('resize', handleResize);
     return () => {
       window.removeEventListener('resize', handleResize);
-      t.dispose();
+      try { t.dispose(); } catch (_e) {}
     };
   }, []);
 
