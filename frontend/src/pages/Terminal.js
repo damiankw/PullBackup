@@ -119,6 +119,7 @@ export default function TerminalPage() {
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const url = `${protocol}://${window.location.host}/api/terminal/ws/${selected}?token=${token}`;
     console.log('Terminal.connect url', url);
+    try { t?.writeln('\r\n\x1b[33mConnecting to server...\x1b[0m\r\n'); } catch (_) {}
     const ws = new WebSocket(url);
     wsRef.current = ws;
 
@@ -144,7 +145,7 @@ export default function TerminalPage() {
 
     ws.onerror = (e) => {
       console.error('Terminal WebSocket error', e);
-      try { term?.writeln('\r\n\x1b[31mWebSocket error\x1b[0m'); } catch (e) {}
+      try { t?.writeln('\r\n\x1b[31mWebSocket error\x1b[0m'); } catch (e) {}
     };
 
     if (t) {
