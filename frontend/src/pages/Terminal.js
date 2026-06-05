@@ -19,6 +19,7 @@ export default function TerminalPage() {
     if (term) return term;
     const t = new XTerm({ cols: 80, rows: 24 });
     let fit = null;
+    console.log('Terminal: creating xterm instance');
 
     try {
       if (xtermRef.current) {
@@ -105,18 +106,23 @@ export default function TerminalPage() {
   const connect = () => {
     if (!selected) return;
     const t = createTerminal();
+    console.log('Terminal.connect', { selected, hasTerm: !!t });
     const token = localStorage.getItem('token');
+    console.log('Terminal token:', token);
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const url = `${protocol}://${window.location.host}/api/terminal/ws/${selected}?token=${token}`;
+    console.log('Terminal.connect url', url);
     const ws = new WebSocket(url);
     wsRef.current = ws;
 
     ws.onopen = () => {
+      console.log('Terminal WebSocket open');
       try { t?.writeln('\x1b[32mConnected to server\x1b[0m'); } catch (e) {}
       try { t?.focus(); } catch (e) {}
     };
 
     ws.onmessage = (ev) => {
+      console.log('Terminal WebSocket message', ev.data && ev.data.slice ? ev.data.slice(0,100) : ev.data);
       try { if (t) t.write(ev.data); } catch (e) {}
     };
 
@@ -130,6 +136,7 @@ export default function TerminalPage() {
     };
 
     ws.onerror = (e) => {
+      console.error('Terminal WebSocket error', e);
       try { term?.writeln('\r\n\x1b[31mWebSocket error\x1b[0m'); } catch (e) {}
     };
 
