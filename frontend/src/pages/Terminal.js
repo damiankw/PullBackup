@@ -16,8 +16,8 @@ export default function TerminalPage() {
 
   useEffect(() => {
     const t = new XTerm({ cols: 80, rows: 24 });
-    const fit = new FitAddon();
-    t.loadAddon(fit);
+    // attach FitAddon lazily after xterm internal viewport is available
+    let fit = null;
     // open terminal when the ref is available
     try {
       if (xtermRef.current) {
@@ -25,7 +25,7 @@ export default function TerminalPage() {
         const el = xtermRef.current;
 
         const maybeFit = () => {
-          const fitLocal = fit;
+          const fitLocal = fit || fitAddonRef.current;
           if (!fitLocal) return;
           // guard internal xterm core/viewport presence to avoid reading `dimensions`
           try {
@@ -46,13 +46,25 @@ export default function TerminalPage() {
           }
         };
 
+        // try to attach FitAddon if/when the core.viewport becomes available
+        const attachFitIfReady = () => {
+          try {
+            if (!fit && t && t._core && t._core.viewport) {
+              fit = new FitAddon();
+              try { t.loadAddon(fit); } catch (_) {}
+              fitAddonRef.current = fit;
+            }
+          } catch (_) {}
+        };
+
         // initial attempt
+        attachFitIfReady();
         maybeFit();
 
         // Observe size changes and call fit when the terminal container is visible
         if (typeof ResizeObserver !== 'undefined') {
           const ro = new ResizeObserver(() => {
-            try { maybeFit(); } catch (e) {}
+            try { attachFitIfReady(); maybeFit(); } catch (e) {}
           });
           ro.observe(el);
           resizeObserverRef.current = ro;
