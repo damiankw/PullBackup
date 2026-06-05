@@ -104,6 +104,7 @@ export default function TerminalPage() {
 
   const connect = () => {
     if (!selected) return;
+    const t = createTerminal();
     const token = localStorage.getItem('token');
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const url = `${protocol}://${window.location.host}/api/terminal/ws/${selected}?token=${token}`;
@@ -111,12 +112,12 @@ export default function TerminalPage() {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      try { term?.writeln('\x1b[32mConnected to server\x1b[0m'); } catch (e) {}
-      try { term?.focus(); } catch (e) {}
+      try { t?.writeln('\x1b[32mConnected to server\x1b[0m'); } catch (e) {}
+      try { t?.focus(); } catch (e) {}
     };
 
     ws.onmessage = (ev) => {
-      try { if (term) term.write(ev.data); } catch (e) {}
+      try { if (t) t.write(ev.data); } catch (e) {}
     };
 
     ws.onclose = () => {
@@ -132,12 +133,12 @@ export default function TerminalPage() {
       try { term?.writeln('\r\n\x1b[31mWebSocket error\x1b[0m'); } catch (e) {}
     };
 
-    if (term) {
+    if (t) {
       // remove previous listener if present
       if (wsRef.current?.dataListener) {
         try { wsRef.current.dataListener.dispose(); } catch (_e) {}
       }
-      const listener = term.onData(data => {
+      const listener = t.onData(data => {
         if (ws && ws.readyState === WebSocket.OPEN) {
           ws.send(data);
         }
