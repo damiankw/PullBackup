@@ -14,11 +14,12 @@ export default function TerminalPage() {
   const [selected, setSelected] = useState('');
   const wsRef = useRef(null);
 
-  useEffect(() => {
+  // Create XTerm lazily when the user clicks Connect to avoid timing issues
+  const createTerminal = () => {
+    if (term) return term;
     const t = new XTerm({ cols: 80, rows: 24 });
-    // attach FitAddon lazily after xterm internal viewport is available
     let fit = null;
-    // open terminal when the ref is available
+
     try {
       if (xtermRef.current) {
         t.open(xtermRef.current);
@@ -27,7 +28,6 @@ export default function TerminalPage() {
         const maybeFit = () => {
           const fitLocal = fit || fitAddonRef.current;
           if (!fitLocal) return;
-          // guard internal xterm core/viewport presence to avoid reading `dimensions`
           try {
             const core = t && t._core;
             const viewport = core && core.viewport;
@@ -35,18 +35,14 @@ export default function TerminalPage() {
               fitLocal.fit();
             }
           } catch (err) {
-            // transient error — retry shortly in case core/viewport isn't initialized yet
             try {
               setTimeout(() => {
-                try {
-                  if (el.clientWidth > 0 && el.clientHeight > 0) fitLocal.fit();
-                } catch (_) {}
+                try { if (el.clientWidth > 0 && el.clientHeight > 0) fitLocal.fit(); } catch (_) {}
               }, 100);
             } catch (_) {}
           }
         };
 
-        // try to attach FitAddon if/when the core.viewport becomes available
         const attachFitIfReady = () => {
           try {
             if (!fit && t && t._core && t._core.viewport) {
@@ -57,11 +53,9 @@ export default function TerminalPage() {
           } catch (_) {}
         };
 
-        // initial attempt
         attachFitIfReady();
         maybeFit();
 
-        // Observe size changes and call fit when the terminal container is visible
         if (typeof ResizeObserver !== 'undefined') {
           const ro = new ResizeObserver(() => {
             try { attachFitIfReady(); maybeFit(); } catch (e) {}
@@ -76,7 +70,10 @@ export default function TerminalPage() {
 
     setTerm(t);
     fitAddonRef.current = fit;
+    return t;
+  };
 
+  useEffect(() => {
     const handleResize = () => {
       const fit = fitAddonRef.current;
       const el = xtermRef.current;
@@ -93,13 +90,13 @@ export default function TerminalPage() {
     window.addEventListener('resize', handleResize);
     return () => {
       window.removeEventListener('resize', handleResize);
-      try { t.dispose(); } catch (_e) {}
+      try { term?.dispose(); } catch (_e) {}
       if (resizeObserverRef.current) {
         try { resizeObserverRef.current.disconnect(); } catch (_e) {}
         resizeObserverRef.current = null;
       }
     };
-  }, []);
+  }, [term]);
 
   useEffect(() => {
     api.get('/servers/').then(res => setServers(res.data)).catch(() => setServers([]));
