@@ -60,27 +60,39 @@ export default function TerminalPage() {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      term.writeln('\x1b[32mConnected to server\x1b[0m');
-      term.focus();
+      try { term?.writeln('\x1b[32mConnected to server\x1b[0m'); } catch (e) {}
+      try { term?.focus(); } catch (e) {}
     };
 
     ws.onmessage = (ev) => {
-      term.write(ev.data);
+      try { if (term) term.write(ev.data); } catch (e) {}
     };
 
     ws.onclose = () => {
-      term.writeln('\r\n\x1b[31mConnection closed\x1b[0m');
+      try { term?.writeln('\r\n\x1b[31mConnection closed\x1b[0m'); } catch (e) {}
+      // dispose onData listener if set
+      if (wsRef.current?.dataListener) {
+        try { wsRef.current.dataListener.dispose(); } catch (_e) {}
+        wsRef.current.dataListener = null;
+      }
     };
 
     ws.onerror = (e) => {
-      term.writeln('\r\n\x1b[31mWebSocket error\x1b[0m');
+      try { term?.writeln('\r\n\x1b[31mWebSocket error\x1b[0m'); } catch (e) {}
     };
 
-    term.onData(data => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(data);
+    if (term) {
+      // remove previous listener if present
+      if (wsRef.current?.dataListener) {
+        try { wsRef.current.dataListener.dispose(); } catch (_e) {}
       }
-    });
+      const listener = term.onData(data => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(data);
+        }
+      });
+      wsRef.current.dataListener = listener;
+    }
   };
 
   const disconnect = () => {
