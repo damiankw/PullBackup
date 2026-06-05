@@ -35,7 +35,14 @@ export default function TerminalPage() {
               fitLocal.fit();
             }
           } catch (err) {
-            // swallow transient errors
+            // transient error — retry shortly in case core/viewport isn't initialized yet
+            try {
+              setTimeout(() => {
+                try {
+                  if (el.clientWidth > 0 && el.clientHeight > 0) fitLocal.fit();
+                } catch (_) {}
+              }, 100);
+            } catch (_) {}
           }
         };
 
