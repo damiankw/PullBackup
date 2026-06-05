@@ -8,6 +8,7 @@ import api from '../api';
 export default function TerminalPage() {
   const xtermRef = useRef(null);
   const fitAddonRef = useRef(null);
+  const resizeObserverRef = useRef(null);
   const [term, setTerm] = useState(null);
   const [servers, setServers] = useState([]);
   const [selected, setSelected] = useState('');
@@ -21,8 +22,27 @@ export default function TerminalPage() {
     try {
       if (xtermRef.current) {
         t.open(xtermRef.current);
-        // fit may throw if terminal/core isn't ready; guard it
-        try { fit.fit(); } catch (e) { console.warn('xterm fit() failed:', e); }
+
+        // Try an initial fit, but only if container has size
+        const el = xtermRef.current;
+        if (el.clientWidth > 0 && el.clientHeight > 0) {
+          try { fit.fit(); } catch (e) { console.warn('xterm fit() failed:', e); }
+        }
+
+        // Observe size changes and call fit when the terminal container is visible
+        if (typeof ResizeObserver !== 'undefined') {
+          const ro = new ResizeObserver(() => {
+            try {
+              if (el.clientWidth > 0 && el.clientHeight > 0) {
+                fit.fit();
+              }
+            } catch (e) {
+              // ignore
+            }
+          });
+          ro.observe(el);
+          resizeObserverRef.current = ro;
+        }
       }
     } catch (e) {
       console.warn('Failed to open xterm:', e);
@@ -32,18 +52,22 @@ export default function TerminalPage() {
     fitAddonRef.current = fit;
 
     const handleResize = () => {
-      if (!fitAddonRef.current) return;
+      const fit = fitAddonRef.current;
+      const el = xtermRef.current;
+      if (!fit || !el) return;
       try {
-        fitAddonRef.current.fit();
-      } catch (e) {
-        // ignore transient fit errors (e.g., terminal not yet attached)
-      }
+        if (el.clientWidth > 0 && el.clientHeight > 0) fit.fit();
+      } catch (e) {}
     };
 
     window.addEventListener('resize', handleResize);
     return () => {
       window.removeEventListener('resize', handleResize);
       try { t.dispose(); } catch (_e) {}
+      if (resizeObserverRef.current) {
+        try { resizeObserverRef.current.disconnect(); } catch (_e) {}
+        resizeObserverRef.current = null;
+      }
     };
   }, []);
 
