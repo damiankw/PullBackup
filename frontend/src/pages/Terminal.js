@@ -117,7 +117,21 @@ export default function TerminalPage() {
     const token = localStorage.getItem('token');
     console.log('Terminal token:', token);
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${protocol}://${window.location.host}/api/terminal/ws/${selected}?token=${token}`;
+
+    // Prefer explicit backend host in development to avoid CRA dev-server not proxying WS.
+    let backendHost;
+    try {
+      if (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL.startsWith('http')) {
+        backendHost = new URL(process.env.REACT_APP_API_URL).host;
+      } else {
+        const devPort = process.env.REACT_APP_API_PORT || (window.location.port === '3000' ? '8000' : window.location.port || '');
+        backendHost = devPort ? `${window.location.hostname}:${devPort}` : window.location.hostname;
+      }
+    } catch (e) {
+      backendHost = `${window.location.hostname}:8000`;
+    }
+
+    const url = `${protocol}://${backendHost}/api/terminal/ws/${selected}?token=${token}`;
     console.log('Terminal.connect url', url);
     try { t?.writeln('\r\n\x1b[33mConnecting to server...\x1b[0m\r\n'); } catch (_) {}
     const ws = new WebSocket(url);
