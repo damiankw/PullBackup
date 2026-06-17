@@ -1,30 +1,33 @@
+# Stage 1: Build React frontend
+FROM node:18-alpine AS frontend-build
+WORKDIR /frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ .
+RUN npm run build
+
+# Stage 2: Python backend with embedded frontend
 FROM python:3.11-slim
 
-# Install system dependencies
 RUN apt-get update && apt-get install -y \
     rsync \
     openssh-client \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
 WORKDIR /app
 
-# Copy requirements first for better caching
 COPY backend/requirements.txt .
-
-# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
 COPY backend/ .
 
-# Create necessary directories
+# Embed the compiled React app
+COPY --from=frontend-build /frontend/build /app/frontend_build
+
 RUN mkdir -p /app/data /app/ssh_keys /backups && \
     chmod 700 /app/ssh_keys
 
-# Expose port
 EXPOSE 8000
 
-# Initialize database and start application
 CMD ["sh", "-c", "python init_db.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

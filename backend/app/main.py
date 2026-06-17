@@ -1,5 +1,8 @@
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import logging
 
@@ -9,6 +12,8 @@ from app.core.migrations import run_migrations
 from app.core.logging_config import setup_logging
 from app.api import auth, servers, ssh_keys, backup_jobs, backup_history, dashboard, users, browse, system, email, audit, terminal
 from app.services.scheduler import backup_scheduler
+
+FRONTEND_DIR = Path(__file__).parent.parent / 'frontend_build'
 
 # Configure logging with timestamps
 setup_logging(debug=settings.DEBUG)
@@ -69,20 +74,29 @@ app.include_router(audit.router, prefix="/api/audit-logs", tags=["Audit Logs"])
 app.include_router(terminal.router, prefix="/api/terminal", tags=["Terminal"])
 
 
-@app.get("/")
-def root():
-    """Root endpoint."""
-    return {
-        "name": "PullBackup API",
-        "version": "1.0.0",
-        "status": "running"
-    }
-
-
 @app.get("/health")
 def health_check():
     """Health check endpoint for container orchestration."""
     return {"status": "healthy"}
+
+
+# Serve the compiled React app.
+# This must come after all API routes so /api/* is never intercepted.
+if (FRONTEND_DIR / 'static').exists():
+    app.mount('/static', StaticFiles(directory=FRONTEND_DIR / 'static'), name='react-static')
+
+
+@app.get('/{full_path:path}', include_in_schema=False)
+async def serve_spa(full_path: str):
+    # Serve real files that exist in the build dir (favicon.ico, manifest.json, …)
+    candidate = FRONTEND_DIR / full_path
+    if candidate.exists() and candidate.is_file():
+        return FileResponse(candidate)
+    # Fall back to index.html so React Router handles the path client-side
+    index = FRONTEND_DIR / 'index.html'
+    if index.exists():
+        return FileResponse(index)
+    return {"name": "PullBackup API", "version": "1.0.0", "status": "running"}
 
 
 if __name__ == "__main__":

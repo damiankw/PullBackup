@@ -40,26 +40,23 @@ stringData:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: pullbackup-backend
+  name: pullbackup
   namespace: pullbackup
   labels:
     app: pullbackup
-    component: backend
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: pullbackup
-      component: backend
   template:
     metadata:
       labels:
         app: pullbackup
-        component: backend
     spec:
       containers:
-      - name: backend
-        image: pullbackup-backend:latest
+      - name: pullbackup
+        image: pullbackup:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
@@ -123,65 +120,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: pullbackup-backend
+  name: pullbackup
   namespace: pullbackup
 spec:
   selector:
     app: pullbackup
-    component: backend
-  ports:
-  - port: 8000
-    targetPort: 8000
-    name: http
-  type: ClusterIP
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: pullbackup-frontend
-  namespace: pullbackup
-  labels:
-    app: pullbackup
-    component: frontend
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: pullbackup
-      component: frontend
-  template:
-    metadata:
-      labels:
-        app: pullbackup
-        component: frontend
-    spec:
-      containers:
-      - name: frontend
-        image: pullbackup-frontend:latest
-        imagePullPolicy: IfNotPresent
-        ports:
-        - containerPort: 80
-          name: http
-        resources:
-          requests:
-            memory: "64Mi"
-            cpu: "100m"
-          limits:
-            memory: "128Mi"
-            cpu: "200m"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: pullbackup-frontend
-  namespace: pullbackup
-spec:
-  selector:
-    app: pullbackup
-    component: frontend
   ports:
   - port: 80
-    targetPort: 80
+    targetPort: 8000
     name: http
   type: LoadBalancer
 ---
@@ -190,8 +136,6 @@ kind: Ingress
 metadata:
   name: pullbackup-ingress
   namespace: pullbackup
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   rules:
   - host: pullbackup.local
@@ -201,13 +145,6 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: pullbackup-frontend
+            name: pullbackup
             port:
               number: 80
-      - path: /api
-        pathType: Prefix
-        backend:
-          service:
-            name: pullbackup-backend
-            port:
-              number: 8000
