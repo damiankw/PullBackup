@@ -34,7 +34,7 @@ def get_logging_config(debug: bool = False):
                 "datefmt": DATE_FORMAT,
             },
             "access": {
-                "format": '%(asctime)s - %(name)s - %(levelname)s - %(client_addr)s - "%(request_line)s" %(status_code)s',
+                "format": LOG_FORMAT,
                 "datefmt": DATE_FORMAT,
             },
         },
