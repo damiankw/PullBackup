@@ -1,7 +1,8 @@
+import json
 import os
+import re
 import subprocess
-import tempfile
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 from datetime import datetime
 from pathlib import Path
 from app.core.config import settings
@@ -98,6 +99,54 @@ class RsyncService:
         snapshots.sort()
         return snapshots[-1]
     
+    def _run_rsync_cmd(self, cmd: list, callback=None) -> Tuple[int, str, bool]:
+        """
+        Run an rsync command, streaming output line by line.
+
+        Returns:
+            (returncode, log_output, timed_out)
+        """
+        rsync_timeout = 14400  # 4 hours
+
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True
+        )
+
+        log_lines = []
+        try:
+            for line in process.stdout:
+                log_lines.append(line.rstrip())
+                if callback:
+                    callback(line.rstrip())
+            process.wait(timeout=rsync_timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+            return -1, '\n'.join(log_lines), True
+
+        return process.returncode, '\n'.join(log_lines), False
+
+    def _parse_verification_failures(self, log_output: str, snapshot_dir: Path) -> List[str]:
+        """
+        Parse rsync log output for 'failed verification' errors.
+        Returns relative file paths (relative to snapshot_dir).
+        """
+        failed = []
+        pattern = re.compile(r'^ERROR:\s+(.+?)\s+failed verification', re.MULTILINE)
+        for match in pattern.finditer(log_output):
+            full_path = match.group(1).strip()
+            try:
+                rel = str(Path(full_path).relative_to(snapshot_dir))
+                failed.append(rel)
+            except ValueError:
+                pass
+        return failed
+
     def execute_backup(
         self,
         hostname: str,
@@ -110,7 +159,8 @@ class RsyncService:
         backup_uuid: Optional[str] = None,
         job_name: Optional[str] = None,
         server_name: Optional[str] = None,
-        schedule: Optional[str] = None
+        schedule: Optional[str] = None,
+        volatile_files: Optional[List[str]] = None,
     ) -> Tuple[bool, str, dict]:
         """
         Execute incremental rsync backup from remote server to local path.
@@ -189,57 +239,101 @@ class RsyncService:
             cmd.append(f"{username}@{hostname}:{remote_path}")
             cmd.append(str(snapshot_dir) + '/')
             
-            # Execute rsync
-            log_lines = []
+            # ── Pass 1: main rsync run ────────────────────────────────────────────
+            # If there are known volatile files, exclude them from this pass so
+            # they don't cause verification failures that abort the job.
+            known_volatile = list(volatile_files) if volatile_files else []
+            pass1_cmd = list(cmd)
+            for vf in known_volatile:
+                pass1_cmd.append(f'--exclude=/{vf}')
+
             start_time = datetime.now()
-            
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                universal_newlines=True
-            )
-            
-            # Read output line by line with timeout
-            # Set rsync timeout: 4 hours max (14400 seconds)
-            # This prevents hanging on stalled NFS mounts
-            rsync_timeout = 14400  # 4 hours
-            
-            try:
-                for line in process.stdout:
-                    log_lines.append(line.rstrip())
-                    if callback:
-                        callback(line.rstrip())
-                
-                # Wait for process with timeout
-                process.wait(timeout=rsync_timeout)
-            except subprocess.TimeoutExpired:
-                # Kill the process if it times out
-                process.kill()
-                process.wait()  # Clean up zombie process
-                error_msg = f"Backup timed out after {rsync_timeout/3600:.1f} hours. This usually indicates:\n- NFS mount is hung/stalled\n- Network storage is unresponsive\n- SSH connection dropped without closing\n\nConsider checking storage availability."
-                log_lines.append(error_msg)
-                return False, '\n'.join(log_lines), {
-                    'bytes_transferred': 0,
-                    'files_transferred': 0,
-                    'snapshot_size_bytes': 0,
-                    'snapshot_total_size_bytes': 0,
-                    'space_saved_bytes': 0
+            returncode, log_output, timed_out = self._run_rsync_cmd(pass1_cmd, callback)
+
+            if timed_out:
+                error_msg = (
+                    "Backup timed out after 4.0 hours. This usually indicates:\n"
+                    "- NFS mount is hung/stalled\n"
+                    "- Network storage is unresponsive\n"
+                    "- SSH connection dropped without closing\n\n"
+                    "Consider checking storage availability."
+                )
+                return False, log_output + '\n' + error_msg, {
+                    'bytes_transferred': 0, 'files_transferred': 0,
+                    'snapshot_size_bytes': 0, 'snapshot_total_size_bytes': 0,
+                    'space_saved_bytes': 0, 'new_volatile_files': [],
+                    'volatile_files_synced': [], 'volatile_files_failed': [],
                 }
-            
+
+            # Detect newly volatile files from pass 1 output
+            newly_detected = self._parse_verification_failures(log_output, snapshot_dir)
+
+            # ── Pass 2: inplace transfer for volatile files ───────────────────────
+            # All known volatile files + anything newly detected this run.
+            volatile_for_pass2 = list(set(known_volatile + newly_detected))
+            volatile_files_synced: List[str] = []
+            volatile_files_failed: List[str] = []
+            pass2_log = ''
+
+            if volatile_for_pass2:
+                import shutil as _shutil
+                rsync_bin2 = _shutil.which('rsync') or 'rsync'
+                ssh_cmd = (
+                    f"ssh -p {port} -o StrictHostKeyChecking=no "
+                    f"-o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                )
+                if ssh_key_path:
+                    ssh_cmd += f" -i {ssh_key_path}"
+
+                pass2_cmd = [
+                    rsync_bin2,
+                    '--inplace', '--whole-file', '--ignore-errors',
+                    '-avz', '--no-owner', '--no-group', '--stats',
+                    '-e', ssh_cmd,
+                ]
+                if previous_snapshot:
+                    pass2_cmd.append(f'--link-dest=../{previous_snapshot.name}')
+
+                # Filter rules: traverse all directories, include only volatile files
+                pass2_cmd.append('--include=*/')
+                unique_names = list({Path(vf).name for vf in volatile_for_pass2})
+                for name in unique_names:
+                    pass2_cmd.append(f'--include={name}')
+                pass2_cmd.append('--exclude=*')
+
+                remote_path_slash = remote_path if remote_path.endswith('/') else remote_path + '/'
+                pass2_cmd.append(f'{username}@{hostname}:{remote_path_slash}')
+                pass2_cmd.append(str(snapshot_dir) + '/')
+
+                p2_returncode, pass2_log, p2_timed_out = self._run_rsync_cmd(pass2_cmd)
+
+                # Exit code 23 (partial transfer) is acceptable for volatile files
+                p2_ok = p2_returncode in (0, 23) and not p2_timed_out
+                pass2_failed = self._parse_verification_failures(pass2_log, snapshot_dir)
+
+                for vf in volatile_for_pass2:
+                    if vf in pass2_failed:
+                        volatile_files_failed.append(vf)
+                    else:
+                        volatile_files_synced.append(vf)
+
+                pass2_log = '\n\n=== Pass 2: Volatile File Transfer (--inplace --whole-file) ===\n' + pass2_log
+
             end_time = datetime.now()
-            
-            log_output = '\n'.join(log_lines)
-            
-            # Parse rsync statistics
-            stats = self._parse_rsync_stats(log_output)
+            combined_log = log_output + pass2_log
+
+            # Pass 1 success: exit 0. With volatile files excluded, exit 23 from
+            # pass 1 means a non-volatile file had an issue — still a real failure.
+            success = returncode == 0
+            stats = self._parse_rsync_stats(combined_log)
             stats['duration'] = (end_time - start_time).total_seconds()
             stats['snapshot_path'] = str(snapshot_dir)
             stats['previous_snapshot'] = str(previous_snapshot) if previous_snapshot else None
-            
-            success = process.returncode == 0
+            stats['new_volatile_files'] = newly_detected
+            stats['volatile_files_synced'] = volatile_files_synced
+            stats['volatile_files_failed'] = volatile_files_failed
+
+            log_output = combined_log
             
             if success:
                 # Calculate actual snapshot size and space saved
@@ -281,7 +375,7 @@ class RsyncService:
                     except Exception as readme_error:
                         log_output += f"\nWarning: Failed to generate README.md: {readme_error}"
             else:
-                log_output += f"\n\nRsync failed with exit code {process.returncode}"
+                log_output += f"\n\nRsync failed with exit code {returncode}"
                 # Clean up failed snapshot directory
                 try:
                     if snapshot_dir.exists():
@@ -300,7 +394,10 @@ class RsyncService:
                 'files_transferred': 0,
                 'snapshot_size_bytes': 0,
                 'snapshot_total_size_bytes': 0,
-                'space_saved_bytes': 0
+                'space_saved_bytes': 0,
+                'new_volatile_files': [],
+                'volatile_files_synced': [],
+                'volatile_files_failed': [],
             }
     
     def _format_bytes(self, bytes_val: int) -> str:

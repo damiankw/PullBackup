@@ -16,10 +16,11 @@ logger = logging.getLogger(__name__)
 def execute_scheduled_backup(backup_job_id: int):
     """
     Execute a scheduled backup (standalone function for APScheduler).
-    
+
     This must be a module-level function (not a class method) so APScheduler
     can serialize it for persistent job storage.
     """
+    import json as _json
     import os
     from pathlib import Path
     
@@ -103,12 +104,13 @@ def execute_scheduled_backup(backup_job_id: int):
         # Get server info
         server = backup_job.server
         ssh_key_path = server.ssh_key.key_file_path if server.ssh_key else None
-        
+        current_volatile = _json.loads(backup_job.volatile_files or '[]')
+
         # Execute backup
         success = False
         log_output = ""
         stats = {}
-        
+
         try:
             success, log_output, stats = rsync_service.execute_backup(
                 hostname=server.hostname,
@@ -120,14 +122,20 @@ def execute_scheduled_backup(backup_job_id: int):
                 backup_uuid=backup_job.backup_uuid,
                 job_name=backup_job.name,
                 server_name=server.name,
-                schedule=backup_job.schedule
+                schedule=backup_job.schedule,
+                volatile_files=current_volatile,
             )
         except Exception as exec_error:
             success = False
             log_output = f"Backup execution error: {str(exec_error)}"
-            stats = {'bytes_transferred': 0, 'files_transferred': 0, 'snapshot_size_bytes': 0, 'snapshot_total_size_bytes': 0, 'space_saved_bytes': 0}
+            stats = {
+                'bytes_transferred': 0, 'files_transferred': 0,
+                'snapshot_size_bytes': 0, 'snapshot_total_size_bytes': 0,
+                'space_saved_bytes': 0, 'new_volatile_files': [],
+                'volatile_files_synced': [], 'volatile_files_failed': [],
+            }
             logger.error(f"Backup job {backup_job_id} execution error: {exec_error}")
-        
+
         # Update history
         history.status = BackupStatus.SUCCESS if success else BackupStatus.FAILED
         history.completed_at = datetime.now()
@@ -137,9 +145,19 @@ def execute_scheduled_backup(backup_job_id: int):
         history.snapshot_size_bytes = stats.get('snapshot_size_bytes', 0)
         history.snapshot_total_size_bytes = stats.get('snapshot_total_size_bytes', 0)
         history.space_saved_bytes = stats.get('space_saved_bytes', 0)
-        
+        history.volatile_files_synced = _json.dumps(stats.get('volatile_files_synced', []))
+        history.volatile_files_failed = _json.dumps(stats.get('volatile_files_failed', []))
+        history.new_volatile_files_detected = _json.dumps(stats.get('new_volatile_files', []))
+
         if not success:
             history.error_message = "Backup failed - check logs for details"
+
+        # Add newly detected volatile files to the job's persisted list
+        new_volatile = stats.get('new_volatile_files', [])
+        if new_volatile:
+            updated_volatile = list(set(current_volatile + new_volatile))
+            backup_job.volatile_files = _json.dumps(updated_volatile)
+            logger.info(f"Job {backup_job_id}: added {len(new_volatile)} new volatile file(s): {new_volatile}")
         
         # Save snapshot metadata to database for fast listing (if successful)
         if success and stats.get('snapshot_path'):

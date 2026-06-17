@@ -1,3 +1,4 @@
+import json
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy.orm import Session, joinedload
 from typing import List
@@ -175,7 +176,10 @@ def update_backup_job(
     for field, value in job_data.dict(exclude_unset=True).items():
         if field == 'schedule' and value != job.schedule:
             schedule_updated = True
-        setattr(job, field, value)
+        if field == 'volatile_files' and isinstance(value, list):
+            setattr(job, field, json.dumps(value))
+        else:
+            setattr(job, field, value)
     
     db.commit()
     db.refresh(job)
@@ -337,25 +341,24 @@ async def run_backup_job(
 
 def execute_backup(job_id: int, history_id: int):
     """Execute backup (called as background task)."""
+    import json as _json
     db = SessionLocal()
     try:
-        # Get backup job and history
         job = db.query(BackupJob).filter(BackupJob.id == job_id).first()
         history = db.query(BackupHistory).filter(BackupHistory.id == history_id).first()
-        
+
         if not job or not history:
             return
-        
-        # Update history status
+
         history.status = BackupStatus.RUNNING
         history.started_at = datetime.now()
         db.commit()
-        
-        # Get server info
+
         server = job.server
         ssh_key_path = server.ssh_key.key_file_path if server.ssh_key else None
-        
-        # Execute backup (README will be generated automatically on success)
+
+        current_volatile = _json.loads(job.volatile_files or '[]')
+
         success, log_output, stats = rsync_service.execute_backup(
             hostname=server.hostname,
             port=server.port,
@@ -366,12 +369,10 @@ def execute_backup(job_id: int, history_id: int):
             backup_uuid=job.backup_uuid,
             job_name=job.name,
             server_name=server.name,
-            schedule=job.schedule
+            schedule=job.schedule,
+            volatile_files=current_volatile,
         )
-        
-        # Note: README.md is now generated automatically in execute_backup
-        
-        # Update history
+
         history.status = BackupStatus.SUCCESS if success else BackupStatus.FAILED
         history.completed_at = datetime.now()
         history.log_output = log_output
@@ -380,60 +381,56 @@ def execute_backup(job_id: int, history_id: int):
         history.snapshot_size_bytes = stats.get('snapshot_size_bytes', 0)
         history.snapshot_total_size_bytes = stats.get('snapshot_total_size_bytes', 0)
         history.space_saved_bytes = stats.get('space_saved_bytes', 0)
-        
+        history.volatile_files_synced = _json.dumps(stats.get('volatile_files_synced', []))
+        history.volatile_files_failed = _json.dumps(stats.get('volatile_files_failed', []))
+        history.new_volatile_files_detected = _json.dumps(stats.get('new_volatile_files', []))
+
         if not success:
             history.error_message = "Backup failed - check logs for details"
-        
-        # Save snapshot metadata to database for fast listing (if successful)
+
+        # Add newly detected volatile files to the job's list
+        new_volatile = stats.get('new_volatile_files', [])
+        if new_volatile:
+            updated_volatile = list(set(current_volatile + new_volatile))
+            job.volatile_files = _json.dumps(updated_volatile)
+
+        # Save snapshot metadata
         if success and stats.get('snapshot_path'):
             try:
                 from pathlib import Path
                 snapshot_path = Path(stats['snapshot_path'])
                 snapshot_name = snapshot_path.name
-                
-                # Parse snapshot creation time from name (format: YYYY-MM-DD_HH-MM-SS)
                 snapshot_created_at = datetime.strptime(snapshot_name[:19], '%Y-%m-%d_%H-%M-%S')
-                
-                # Check if snapshot already exists in database
                 existing_snapshot = db.query(Snapshot).filter(
                     Snapshot.backup_job_id == job.id,
                     Snapshot.name == snapshot_name
                 ).first()
-                
                 if not existing_snapshot:
-                    # Create new snapshot record
-                    # size_bytes = actual NEW data transferred (incremental disk usage)
-                    # logical_size_bytes = total size of all files in snapshot (from du)
-                    snapshot = Snapshot(
+                    db.add(Snapshot(
                         backup_job_id=job.id,
                         name=snapshot_name,
                         created_at=snapshot_created_at,
-                        size_bytes=stats.get('bytes_transferred', 0),  # Use rsync's actual transferred bytes
+                        size_bytes=stats.get('bytes_transferred', 0),
                         logical_size_bytes=stats.get('snapshot_total_size_bytes', 0),
                         file_count=stats.get('files_transferred', 0)
-                    )
-                    db.add(snapshot)
+                    ))
                 else:
-                    # Update existing snapshot
-                    existing_snapshot.size_bytes = stats.get('bytes_transferred', 0)  # Actual new data
+                    existing_snapshot.size_bytes = stats.get('bytes_transferred', 0)
                     existing_snapshot.logical_size_bytes = stats.get('snapshot_total_size_bytes', 0)
                     existing_snapshot.file_count = stats.get('files_transferred', 0)
                     existing_snapshot.indexed_at = datetime.now()
             except Exception as snapshot_error:
                 print(f"Failed to save snapshot metadata: {snapshot_error}")
-        
-        # Update backup job
+
         job.last_run = datetime.now()
-        
         db.commit()
-        
-        # Send email notification
+
         try:
             email_service = EmailService(db)
             email_service.send_backup_notification(history)
         except Exception as email_error:
             print(f"Failed to send email notification: {email_error}")
-        
+
     except Exception as e:
         if history:
             history.status = BackupStatus.FAILED

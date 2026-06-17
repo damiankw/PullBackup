@@ -32,6 +32,7 @@ import {
   Visibility as VisibilityIcon,
   FilterList as FilterListIcon,
   ContentCopy as ContentCopyIcon,
+  FlashOn as FlashOnIcon,
 } from '@mui/icons-material';
 import api from '../api';
 
@@ -519,6 +520,61 @@ export default function BackupHistory() {
                   <strong>Error:</strong> {selectedLog.error_message}
                 </Typography>
               )}
+              {/* Volatile file transfer summary */}
+              {(() => {
+                const synced = selectedLog.volatile_files_synced || [];
+                const failed = selectedLog.volatile_files_failed || [];
+                const detected = selectedLog.new_volatile_files_detected || [];
+                const hasAny = synced.length || failed.length || detected.length;
+                if (!hasAny) return null;
+                return (
+                  <Box sx={{ mt: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                      <FlashOnIcon sx={{ fontSize: '1rem', color: '#f59e0b' }} />
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#f59e0b' }}>
+                        Volatile File Transfers
+                      </Typography>
+                    </Box>
+                    {detected.length > 0 && (
+                      <Box sx={{ mb: 1 }}>
+                        <Typography variant="caption" sx={{ color: '#f59e0b', fontWeight: 600, display: 'block', mb: 0.5 }}>
+                          Newly detected ({detected.length})
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          {detected.map(f => (
+                            <Chip key={f} label={f} size="small" sx={{ fontFamily: 'monospace', fontSize: '0.7rem', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }} />
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+                    {synced.length > 0 && (
+                      <Box sx={{ mb: 1 }}>
+                        <Typography variant="caption" sx={{ color: '#10b981', fontWeight: 600, display: 'block', mb: 0.5 }}>
+                          Synced via inplace ({synced.length})
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          {synced.map(f => (
+                            <Chip key={f} label={f} size="small" sx={{ fontFamily: 'monospace', fontSize: '0.7rem', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981' }} />
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+                    {failed.length > 0 && (
+                      <Box sx={{ mb: 1 }}>
+                        <Typography variant="caption" sx={{ color: '#ef4444', fontWeight: 600, display: 'block', mb: 0.5 }}>
+                          Failed even with inplace ({failed.length})
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          {failed.map(f => (
+                            <Chip key={f} label={f} size="small" sx={{ fontFamily: 'monospace', fontSize: '0.7rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444' }} />
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+                  </Box>
+                );
+              })()}
+
               <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
                 <strong>Output Log:</strong>
               </Typography>

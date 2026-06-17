@@ -88,7 +88,7 @@ class SSHKey(Base):
 
 class BackupJob(Base):
     __tablename__ = "backup_jobs"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     backup_uuid = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     name = Column(String(100), nullable=False)
@@ -96,6 +96,7 @@ class BackupJob(Base):
     remote_path = Column(String(500), nullable=False)
     schedule = Column(String(100), nullable=True)  # Cron expression
     rsync_options = Column(String(500), nullable=True)
+    volatile_files = Column(Text, nullable=True)  # JSON array of relative paths auto-detected as volatile
     is_active = Column(Boolean, default=True)
     last_run = Column(DateTime(timezone=True), nullable=True)
     next_run = Column(DateTime(timezone=True), nullable=True)
@@ -126,6 +127,9 @@ class BackupHistory(Base):
     snapshot_total_size_bytes = Column(Integer, default=0)  # Logical size (all files)
     space_saved_bytes = Column(Integer, default=0)  # Space saved by hardlinks
     triggered_by = Column(String(50), nullable=True)  # 'manual', 'schedule', 'api'
+    volatile_files_synced = Column(Text, nullable=True)  # JSON array: routed through inplace and succeeded
+    volatile_files_failed = Column(Text, nullable=True)  # JSON array: failed even with inplace
+    new_volatile_files_detected = Column(Text, nullable=True)  # JSON array: newly added to job volatile list
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships

@@ -1,7 +1,19 @@
+import json
 from pydantic import BaseModel, EmailStr, validator
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
+
+
+def _parse_json_list(v) -> List[str]:
+    if not v:
+        return []
+    if isinstance(v, list):
+        return v
+    try:
+        return json.loads(v)
+    except Exception:
+        return []
 
 
 # Enums
@@ -202,6 +214,7 @@ class BackupJobUpdate(BaseModel):
     schedule: Optional[str] = None
     rsync_options: Optional[str] = None
     is_active: Optional[bool] = None
+    volatile_files: Optional[List[str]] = None
 
 
 class BackupJob(BackupJobBase):
@@ -214,7 +227,12 @@ class BackupJob(BackupJobBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     server: Optional['Server'] = None
-    
+    volatile_files: Optional[List[str]] = []
+
+    @validator('volatile_files', pre=True, always=True)
+    def parse_volatile_files(cls, v):
+        return _parse_json_list(v)
+
     class Config:
         from_attributes = True
 
@@ -238,9 +256,16 @@ class BackupHistory(BackupHistoryBase):
     log_output: Optional[str] = None
     bytes_transferred: int = 0
     files_transferred: int = 0
+    volatile_files_synced: Optional[List[str]] = []
+    volatile_files_failed: Optional[List[str]] = []
+    new_volatile_files_detected: Optional[List[str]] = []
     created_at: datetime
     backup_job: Optional['BackupJob'] = None
-    
+
+    @validator('volatile_files_synced', 'volatile_files_failed', 'new_volatile_files_detected', pre=True, always=True)
+    def parse_volatile_history(cls, v):
+        return _parse_json_list(v)
+
     class Config:
         from_attributes = True
 

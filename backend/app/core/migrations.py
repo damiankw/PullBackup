@@ -14,16 +14,19 @@ def run_migrations():
     This executes automatically on application startup.
     """
     logger.info("Checking for pending database migrations...")
-    
+
     with engine.connect() as conn:
         # Migration 1: Create audit_logs table if it doesn't exist
         _create_audit_logs_table(conn)
-        
+
         # Migration 2: Add public_key_content column to ssh_keys
         _add_public_key_content_column(conn)
-        
+
+        # Migration 3: Add volatile files tracking columns
+        _add_volatile_files_columns(conn)
+
         conn.commit()
-    
+
     logger.info("Database migrations completed")
 
 
@@ -61,6 +64,26 @@ def _create_audit_logs_table(conn):
     conn.execute(text("CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at)"))
     
     logger.info("✓ Created audit_logs table with indexes")
+
+
+def _add_volatile_files_columns(conn):
+    """Add volatile file tracking columns to backup_jobs and backup_history."""
+    inspector = inspect(engine)
+
+    if 'backup_jobs' in inspector.get_table_names():
+        existing = [col['name'] for col in inspector.get_columns('backup_jobs')]
+        if 'volatile_files' not in existing:
+            logger.info("Adding volatile_files column to backup_jobs...")
+            conn.execute(text("ALTER TABLE backup_jobs ADD COLUMN volatile_files TEXT"))
+            logger.info("✓ Added volatile_files to backup_jobs")
+
+    if 'backup_history' in inspector.get_table_names():
+        existing = [col['name'] for col in inspector.get_columns('backup_history')]
+        for col in ('volatile_files_synced', 'volatile_files_failed', 'new_volatile_files_detected'):
+            if col not in existing:
+                logger.info(f"Adding {col} column to backup_history...")
+                conn.execute(text(f"ALTER TABLE backup_history ADD COLUMN {col} TEXT"))
+                logger.info(f"✓ Added {col} to backup_history")
 
 
 def _add_public_key_content_column(conn):

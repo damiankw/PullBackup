@@ -43,8 +43,8 @@ async def websocket_ssh(websocket: WebSocket, server_id: int, token: str = Query
             await websocket.close(code=1008)
             return
 
-        # Permission: owner or admin
-        if server.owner_id != user.id and getattr(user, 'role', None) != 'admin':
+        # Permission: only admin allowed to open terminal
+        if getattr(user, 'role', None) != 'admin':
             await websocket.close(code=1008)
             return
 

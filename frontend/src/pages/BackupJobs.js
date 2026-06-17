@@ -26,12 +26,15 @@ import {
   Snackbar,
   Alert,
   CircularProgress,
+  Tooltip,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
   PlayArrow as PlayArrowIcon,
+  FlashOn as FlashOnIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import api from '../api';
 
@@ -302,6 +305,17 @@ export default function BackupJobs() {
     }
   };
 
+  const handleRemoveVolatileFile = async (jobId, filePath) => {
+    try {
+      const job = jobs.find(j => j.id === jobId);
+      const updatedFiles = (job.volatile_files || []).filter(f => f !== filePath);
+      await api.put(`/backup-jobs/${jobId}`, { volatile_files: updatedFiles });
+      fetchJobs();
+    } catch (error) {
+      setSnackbar({ open: true, message: 'Failed to remove volatile file', severity: 'error' });
+    }
+  };
+
   const handleSort = (property) => {
     const isAsc = orderBy === property && order === 'asc';
     setOrder(isAsc ? 'desc' : 'asc');
@@ -436,6 +450,7 @@ export default function BackupJobs() {
                   Status
                 </TableSortLabel>
               </TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Volatile Files</TableCell>
               <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -530,9 +545,30 @@ export default function BackupJobs() {
                   )}
                 </TableCell>
                 <TableCell>
-                  <IconButton 
-                    size="small" 
-                    onClick={() => handleRunNow(job.id)} 
+                  {job.volatile_files && job.volatile_files.length > 0 ? (
+                    <Tooltip title={job.volatile_files.join('\n')} placement="left">
+                      <Chip
+                        icon={<FlashOnIcon sx={{ fontSize: '0.85rem !important' }} />}
+                        label={`${job.volatile_files.length} file${job.volatile_files.length !== 1 ? 's' : ''}`}
+                        size="small"
+                        sx={{
+                          background: 'rgba(245, 158, 11, 0.15)',
+                          border: '1px solid rgba(245, 158, 11, 0.3)',
+                          color: '#f59e0b',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => handleOpen(job)}
+                      />
+                    </Tooltip>
+                  ) : (
+                    <Typography variant="caption" color="text.disabled">—</Typography>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <IconButton
+                    size="small"
+                    onClick={() => handleRunNow(job.id)}
                     title="Run now"
                     disabled={runningJobs.has(job.id)}
                     sx={{
@@ -807,6 +843,45 @@ export default function BackupJobs() {
               )}
             </Grid>
           </Box>
+          {/* Volatile Files section — only shown when editing an existing job */}
+          {editingJob && (
+            <Box sx={{ mt: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <FlashOnIcon sx={{ fontSize: '1rem', color: '#f59e0b' }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#f59e0b' }}>
+                  Volatile Files (Auto-detected)
+                </Typography>
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+                These files are transferred using <code>--inplace --whole-file</code> to avoid checksum failures caused by live writes. Detected automatically — remove entries that are no longer needed.
+              </Typography>
+              {(!editingJob.volatile_files || editingJob.volatile_files.length === 0) ? (
+                <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>
+                  No volatile files detected yet. They will appear here after a backup run encounters checksum failures.
+                </Typography>
+              ) : (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  {editingJob.volatile_files.map((file) => (
+                    <Chip
+                      key={file}
+                      label={file}
+                      size="small"
+                      onDelete={() => handleRemoveVolatileFile(editingJob.id, file)}
+                      deleteIcon={<CloseIcon />}
+                      sx={{
+                        fontFamily: 'monospace',
+                        fontSize: '0.75rem',
+                        background: 'rgba(245, 158, 11, 0.1)',
+                        border: '1px solid rgba(245, 158, 11, 0.25)',
+                        color: '#f59e0b',
+                        '& .MuiChip-deleteIcon': { color: '#f59e0b', opacity: 0.7 },
+                      }}
+                    />
+                  ))}
+                </Box>
+              )}
+            </Box>
+          )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 3 }}>
           <Button onClick={handleClose} sx={{ px: 3 }}>

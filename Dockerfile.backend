@@ -1,4 +1,4 @@
-FROM docker.io/python:3.11-slim
+FROM python:3.11-slim
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -26,6 +26,5 @@ RUN mkdir -p /app/data /app/ssh_keys /backups && \
 # Expose port
 EXPOSE 8000
 
-# Run database initialization and start application with timestamped logging
-# Note: Migrations now run automatically on startup via app/core/migrations.py
-CMD ["sh", "-c", "python init_db.py && python start.py"]
+# Initialize database and start application
+CMD ["sh", "-c", "python init_db.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

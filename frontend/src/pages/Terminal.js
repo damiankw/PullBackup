@@ -12,6 +12,7 @@ export default function TerminalPage() {
   const [term, setTerm] = useState(null);
   const [servers, setServers] = useState([]);
   const [selected, setSelected] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
   const wsRef = useRef(null);
 
   // Create XTerm lazily when the user clicks Connect to avoid timing issues
@@ -19,6 +20,7 @@ export default function TerminalPage() {
     if (term) return term;
     const t = new XTerm({ cols: 80, rows: 24 });
     let fit = null;
+    try { window.__terminalDebug = window.__terminalDebug || []; } catch (_) {}
     console.log('Terminal: creating xterm instance');
 
     try {
@@ -103,6 +105,17 @@ export default function TerminalPage() {
     api.get('/servers/').then(res => setServers(res.data)).catch(() => setServers([]));
   }, []);
 
+  // fetch current user to determine admin privileges
+  useEffect(() => {
+    api.get('/users/me').then(res => {
+      try {
+        setIsAdmin(res.data?.role === 'admin');
+      } catch (e) {
+        setIsAdmin(false);
+      }
+    }).catch(() => setIsAdmin(false));
+  }, []);
+
   // auto-select first server when servers list loads
   useEffect(() => {
     if (servers && servers.length && !selected) {
@@ -113,8 +126,10 @@ export default function TerminalPage() {
   const connect = () => {
     if (!selected) return;
     const t = createTerminal();
+    try { window.__terminalDebug.push({evt:'connect_attempt', selected}); } catch (_) {}
     console.log('Terminal.connect', { selected, hasTerm: !!t });
     const token = localStorage.getItem('token');
+    try { window.__terminalDebug.push({evt:'token_present', hasToken: !!token}); } catch (_) {}
     console.log('Terminal token:', token);
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
 
@@ -132,23 +147,28 @@ export default function TerminalPage() {
     }
 
     const url = `${protocol}://${backendHost}/api/terminal/ws/${selected}?token=${token}`;
+    try { window.__terminalDebug.push({evt:'ws_url', url}); } catch (_) {}
     console.log('Terminal.connect url', url);
     try { t?.writeln('\r\n\x1b[33mConnecting to server...\x1b[0m\r\n'); } catch (_) {}
+    try { window.__terminalDebug.push({evt:'wrote_connect_message'}); } catch (_) {}
     const ws = new WebSocket(url);
     wsRef.current = ws;
 
     ws.onopen = () => {
+      try { window.__terminalDebug.push({evt:'ws_open'}); } catch (_) {}
       console.log('Terminal WebSocket open');
       try { t?.writeln('\x1b[32mConnected to server\x1b[0m'); } catch (e) {}
       try { t?.focus(); } catch (e) {}
     };
 
     ws.onmessage = (ev) => {
+      try { window.__terminalDebug.push({evt:'ws_message', data: ev.data && ev.data.slice ? ev.data.slice(0,200) : ev.data}); } catch (_) {}
       console.log('Terminal WebSocket message', ev.data && ev.data.slice ? ev.data.slice(0,100) : ev.data);
       try { if (t) t.write(ev.data); } catch (e) {}
     };
 
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
+      try { window.__terminalDebug.push({evt:'ws_close', code: ev?.code}); } catch (_) {}
       try { term?.writeln('\r\n\x1b[31mConnection closed\x1b[0m'); } catch (e) {}
       // dispose onData listener if set
       if (wsRef.current?.dataListener) {
@@ -158,6 +178,7 @@ export default function TerminalPage() {
     };
 
     ws.onerror = (e) => {
+      try { window.__terminalDebug.push({evt:'ws_error', err: String(e)}); } catch (_) {}
       console.error('Terminal WebSocket error', e);
       try { t?.writeln('\r\n\x1b[31mWebSocket error\x1b[0m'); } catch (e) {}
     };
@@ -196,10 +217,16 @@ export default function TerminalPage() {
               <MenuItem key={s.id} value={s.id}>{s.name} — {s.hostname}</MenuItem>
             ))}
           </Select>
-          <Button variant="contained" color="primary" onClick={connect} disabled={!selected}>Connect</Button>
+          <Button variant="contained" color="primary" onClick={connect} disabled={!selected || !isAdmin}>Connect</Button>
           <Button variant="outlined" color="error" onClick={disconnect}>Disconnect</Button>
         </Box>
       </Paper>
+
+      {!isAdmin && (
+        <Paper sx={{ p: 2, mb: 2, bgcolor: '#fff3f0' }}>
+          <Typography variant="body2" color="text.secondary">Terminal access is restricted to administrators only.</Typography>
+        </Paper>
+      )}
 
       <Box sx={{ height: '70vh', borderRadius: 2, overflow: 'hidden' }}>
         <div ref={xtermRef} style={{ height: '100%', width: '100%' }} />
