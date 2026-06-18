@@ -215,6 +215,8 @@ Values from the `servers` and `backup_jobs` tables (hostname, username, `remote_
 
 **Recommended mitigation**: Add stricter validation and normalization of remote paths. Consider whitelisting allowed characters.
 
+> **ACKNOWLEDGED / NOT APPLICABLE**: Admins who can configure a backup job already hold SSH credentials to the target server. Any command injection through hostname/username/remote_path would grant the same access they already have — no privilege escalation is possible. Input validation added in fix #10/#11 still provides defence-in-depth at the API boundary.
+
 **18. Retention of complete historical filesystem snapshots**
 
 Every backup snapshot is retained indefinitely in the `BACKUP_ROOT_DIR` volume.
@@ -230,6 +232,8 @@ Tokens created in `security.py` only set `sub` and `role`. There is no `iss` or 
 **Impact**: Tokens issued by other systems using the same `SECRET_KEY` (or in misconfigured multi-environment setups) may be accepted.
 
 **Recommended mitigation**: Add and validate `iss` and `aud` claims. Consider adding a `jti` (JWT ID) for revocation capabilities.
+
+> **RESOLVED**: `create_access_token` now stamps every token with `iss: "pullbackup"` and `aud: "pullbackup"`. `decode_access_token` passes `audience` and `issuer` to `jwt.decode`, so tokens from any other issuer or intended for any other audience are rejected outright. Both values are configurable via `TOKEN_ISSUER` / `TOKEN_AUDIENCE` environment variables.
 
 **20. Extremely broad privileges for the admin role**
 
