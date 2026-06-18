@@ -225,6 +225,8 @@ Every backup snapshot is retained indefinitely in the `BACKUP_ROOT_DIR` volume.
 
 **Recommended mitigation**: Implement retention policies, encryption of backup storage, and the principle of least privilege for volume access.
 
+> **ACKNOWLEDGED / BY DESIGN**: Unlimited retention is intentional. The hardlink strategy means disk cost is proportional only to changed/deleted files, not the full dataset per snapshot. Retention policies would limit recovery of deleted files to a fixed window, which is not acceptable for this use case.
+
 **19. JWT tokens lack issuer and audience validation**
 
 Tokens created in `security.py` only set `sub` and `role`. There is no `iss` or `aud` claim, and `decode_access_token` does not verify them.
@@ -242,6 +244,8 @@ Administrators can view all data, manage all users, open interactive shells on e
 **Impact**: Compromise of any single admin account gives near-total control over the backup system and all connected infrastructure.
 
 **Recommended mitigation**: Implement additional controls such as step-up authentication for terminal access, granular permissions, or separate "backup operator" roles.
+
+> **ACKNOWLEDGED / BY DESIGN**: Admin users are intended to have full access — that is the purpose of the admin role. Non-admin users already have a restricted view (own jobs and servers only). No further role subdivision is planned.
 
 ## Additional Guidance
 
