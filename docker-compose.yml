@@ -14,12 +14,10 @@ services:
       - SECRET_KEY=${SECRET_KEY:-change-this-secret-key-in-production}
       - ACCESS_TOKEN_EXPIRE_MINUTES=30
       - BACKUP_ROOT_DIR=/backups
-      - SSH_KEYS_DIR=/app/ssh_keys
       - MAX_PARALLEL_BACKUPS=3
     volumes:
       - ./data:/app/data
       - ./backups:/backups
-      - ./ssh_keys:/app/ssh_keys
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -29,4 +27,3 @@ services:
 volumes:
   data:
   backups:
-  ssh_keys:

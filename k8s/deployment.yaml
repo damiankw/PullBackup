@@ -77,7 +77,7 @@ spec:
         - name: BACKUP_ROOT_DIR
           value: "/backups"
         - name: SSH_KEYS_DIR
-          value: "/app/ssh_keys"
+          value: "/app/data/ssh_keys"
         - name: MAX_PARALLEL_BACKUPS
           value: "3"
         volumeMounts:
@@ -85,8 +85,6 @@ spec:
           mountPath: /app/data
         - name: backups
           mountPath: /backups
-        - name: ssh-keys
-          mountPath: /app/ssh_keys
         livenessProbe:
           httpGet:
             path: /health
@@ -113,9 +111,6 @@ spec:
       - name: backups
         persistentVolumeClaim:
           claimName: pullbackup-backups
-      - name: ssh-keys
-        emptyDir:
-          medium: Memory
 ---
 apiVersion: v1
 kind: Service
