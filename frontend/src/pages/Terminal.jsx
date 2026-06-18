@@ -136,10 +136,10 @@ export default function TerminalPage() {
     // Prefer explicit backend host in development to avoid CRA dev-server not proxying WS.
     let backendHost;
     try {
-      if (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL.startsWith('http')) {
-        backendHost = new URL(process.env.REACT_APP_API_URL).host;
+      if (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.startsWith('http')) {
+        backendHost = new URL(import.meta.env.VITE_API_URL).host;
       } else {
-        const devPort = process.env.REACT_APP_API_PORT || (window.location.port === '3000' ? '8000' : window.location.port || '');
+        const devPort = import.meta.env.VITE_API_PORT || (window.location.port === '3000' ? '8000' : window.location.port || '');
         backendHost = devPort ? `${window.location.hostname}:${devPort}` : window.location.hostname;
       }
     } catch (e) {

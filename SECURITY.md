@@ -161,6 +161,8 @@ Private keys are written to the filesystem (under `SSH_KEYS_DIR`) with mode 0600
 
 **Recommended mitigation**: Implement at-rest encryption for the SSH keys directory (e.g. using age, gpg, or filesystem-level encryption). Consider using an external secret store (Vault, etc.) for production.
 
+> **DEPLOYMENT RESPONSIBILITY**: Keys are stored with 0600 permissions and the container runs as a non-root user (fix #4). Further protection (encrypted volume, secret store) must be handled at the infrastructure level and is out of scope for the application.
+
 **13. Application serves plain HTTP only**
 
 The FastAPI/uvicorn server listens on HTTP with no TLS support in the application.
@@ -169,6 +171,8 @@ The FastAPI/uvicorn server listens on HTTP with no TLS support in the applicatio
 
 **Recommended mitigation**: Strongly recommend (or enforce) TLS termination in front of the application in all production documentation and default configurations.
 
+> **DEPLOYMENT RESPONSIBILITY**: TLS termination should be handled by a reverse proxy or ingress controller (nginx, Traefik, k8s Ingress) in front of the application. The unified container serves its own frontend so no cross-origin traffic is exposed in plain HTTP in a typical deployment.
+
 **14. SQLite database contains password hashes on disk**
 
 The database file (`pullbackup.db`) stores bcrypt password hashes and is located in a host-mounted or persistent volume.
@@ -176,6 +180,8 @@ The database file (`pullbackup.db`) stores bcrypt password hashes and is located
 **Impact**: Direct filesystem access to the database file allows offline password cracking attempts.
 
 **Recommended mitigation**: Ensure strict filesystem permissions on the database file. Consider using PostgreSQL with proper access controls for higher-security deployments.
+
+> **DEPLOYMENT RESPONSIBILITY**: The application runs as a non-root user (fix #4) so the database file is owned by the `pullbackup` user. Bcrypt is used for password hashing (slow by design). Further hardening via encrypted volumes or PostgreSQL with access controls is an infrastructure decision outside the application's scope.
 
 **15. Frontend dependencies contain known vulnerabilities**
 
