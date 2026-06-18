@@ -223,7 +223,8 @@ def health_check(
     
     issues = []
     warnings = []
-    
+    now = datetime.now()
+
     # Check for stuck RUNNING jobs
     stuck_threshold = now - timedelta(hours=6)
     stuck_jobs = db.query(BackupHistory).filter(
@@ -252,9 +253,7 @@ def health_check(
         BackupJob.is_active == True,
         BackupJob.schedule.isnot(None)
     ).all()
-    
-    now = datetime.now()
-    
+
     for job in active_jobs:
         # Get next run time from scheduler
         next_run = backup_scheduler.get_next_run_time(job.id)
