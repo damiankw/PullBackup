@@ -1,14 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Box,
   Typography,
   Paper,
-  Grid,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Table,
   TableBody,
   TableCell,
@@ -37,20 +32,54 @@ import {
   Download as DownloadIcon,
   FolderZip as FolderZipIcon,
   ArrowBack as ArrowBackIcon,
-  CalendarToday as CalendarIcon,
   Visibility as VisibilityIcon,
   ContentCopy as ContentCopyIcon,
   FiberNew as NewIcon,
   Edit as EditIcon,
   CompareArrows as CompareIcon,
+  ChevronRight as ChevronRightIcon,
 } from '@mui/icons-material';
 import api from '../api';
+
+const ColumnItem = ({ selected, onClick, children }) => (
+  <Box
+    onClick={onClick}
+    sx={{
+      px: 2, py: 1.5,
+      cursor: 'pointer',
+      borderLeft: selected ? '3px solid #14b8a6' : '3px solid transparent',
+      backgroundColor: selected ? 'rgba(20,184,166,0.1)' : 'transparent',
+      '&:hover': { backgroundColor: selected ? 'rgba(20,184,166,0.12)' : 'rgba(148,163,184,0.05)' },
+      transition: 'background-color 0.15s',
+    }}
+  >
+    {children}
+  </Box>
+);
+
+const ColumnHeader = ({ children, right }) => (
+  <Box sx={{
+    px: 2, py: 1.5,
+    borderBottom: '1px solid rgba(148,163,184,0.15)',
+    backgroundColor: 'rgba(148,163,184,0.04)',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexShrink: 0,
+  }}>
+    <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'text.secondary' }}>
+      {children}
+    </Typography>
+    {right}
+  </Box>
+);
 
 export default function BrowseBackups() {
   const [searchParams, setSearchParams] = useSearchParams();
   const hasRestoredRef = useRef(false);
-  
+
   const [jobs, setJobs] = useState([]);
+  const [selectedServerId, setSelectedServerId] = useState('');
   const [selectedJobId, setSelectedJobId] = useState('');
   const [snapshots, setSnapshots] = useState([]);
   const [selectedSnapshot, setSelectedSnapshot] = useState(null);
@@ -71,7 +100,26 @@ export default function BrowseBackups() {
   const [showChanges, setShowChanges] = useState(false);
   const [hasPreviousSnapshot, setHasPreviousSnapshot] = useState(false);
 
-  // Load backup jobs
+  // Derive unique servers from loaded jobs
+  const servers = useMemo(() => {
+    const seen = new Set();
+    const result = [];
+    jobs.forEach(job => {
+      const sid = job.server_id || job.server?.id;
+      if (sid && !seen.has(sid)) {
+        seen.add(sid);
+        result.push({ id: sid, name: job.server?.name || `Server #${sid}`, hostname: job.server?.hostname || '' });
+      }
+    });
+    return result.sort((a, b) => a.name.localeCompare(b.name));
+  }, [jobs]);
+
+  // Jobs filtered to the selected server
+  const serverJobs = useMemo(() => {
+    if (!selectedServerId) return [];
+    return jobs.filter(j => String(j.server_id || j.server?.id) === String(selectedServerId));
+  }, [jobs, selectedServerId]);
+
   useEffect(() => {
     loadJobs();
   }, []);
@@ -88,15 +136,19 @@ export default function BrowseBackups() {
   // Restore state from URL on mount (after jobs are loaded)
   useEffect(() => {
     if (jobs.length === 0 || hasRestoredRef.current) return;
-    
+
     const jobId = searchParams.get('job');
     const snapshot = searchParams.get('snapshot');
     const path = searchParams.get('path');
-    
+
     if (jobId) {
       setSelectedJobId(jobId);
-      
-      // If snapshot is in URL, load snapshots then browse it
+
+      // Pre-select the server that owns this job
+      const job = jobs.find(j => String(j.id) === String(jobId));
+      const sid = job?.server_id || job?.server?.id;
+      if (sid) setSelectedServerId(String(sid));
+
       if (snapshot) {
         const restoreSnapshot = async () => {
           try {
@@ -107,8 +159,7 @@ export default function BrowseBackups() {
             setTotalLogicalSize(response.data.total_logical_size_bytes || 0);
             setTotalSpaceSaved(response.data.total_space_saved_bytes || 0);
             setSelectedSnapshot(snapshot);
-            
-            // Now browse the snapshot at the specified path
+
             const browseResponse = await api.get(
               `/browse/backup-jobs/${jobId}/snapshots/${snapshot}/browse`,
               { params: { path: path || '' } }
@@ -122,7 +173,6 @@ export default function BrowseBackups() {
             hasRestoredRef.current = true;
           }
         };
-        
         restoreSnapshot();
       } else {
         hasRestoredRef.current = true;
@@ -132,30 +182,20 @@ export default function BrowseBackups() {
     }
   }, [jobs, searchParams]);
 
-  // Update URL when state changes (but not during initial restore)
+  // Keep URL in sync with navigation state
   useEffect(() => {
-    if (!hasRestoredRef.current) return; // Don't update URL until we've restored from it
-    
+    if (!hasRestoredRef.current) return;
     const params = {};
-    
-    if (selectedJobId) {
-      params.job = selectedJobId;
-    }
-    if (selectedSnapshot) {
-      params.snapshot = selectedSnapshot;
-    }
-    if (currentPath) {
-      params.path = currentPath;
-    }
-    
+    if (selectedJobId) params.job = selectedJobId;
+    if (selectedSnapshot) params.snapshot = selectedSnapshot;
+    if (currentPath) params.path = currentPath;
     setSearchParams(params);
   }, [selectedJobId, selectedSnapshot, currentPath, setSearchParams]);
 
-  // Load snapshots when job is selected
+  // Load snapshots when job changes
   useEffect(() => {
-    // Skip if we haven't restored yet (avoid race condition)
     if (!hasRestoredRef.current) return;
-    
+
     const loadSnapshotsForJob = async () => {
       setLoading(true);
       setError('');
@@ -185,7 +225,6 @@ export default function BrowseBackups() {
     }
   }, [selectedJobId]);
 
-  // Browse snapshot contents
   const browseSnapshot = async (snapshotName, path = '') => {
     setLoading(true);
     setError('');
@@ -197,9 +236,7 @@ export default function BrowseBackups() {
       setItems(response.data.items);
       setCurrentPath(path);
       setHasPreviousSnapshot(response.data.has_previous_snapshot || false);
-      if (!selectedSnapshot) {
-        setSelectedSnapshot(snapshotName);
-      }
+      if (!selectedSnapshot) setSelectedSnapshot(snapshotName);
     } catch (err) {
       setError('Failed to browse snapshot');
       setItems([]);
@@ -208,43 +245,36 @@ export default function BrowseBackups() {
     }
   };
 
-  // Navigate to folder
-  const navigateToFolder = (folderPath) => {
-    browseSnapshot(selectedSnapshot, folderPath);
-  };
+  const navigateToFolder = (folderPath) => browseSnapshot(selectedSnapshot, folderPath);
 
-  // Toggle change detection
-  const handleToggleChanges = () => {
-    setShowChanges(!showChanges);
-  };
+  const handleToggleChanges = () => setShowChanges(!showChanges);
 
-  // Re-browse when showChanges toggles
   useEffect(() => {
     if (selectedSnapshot && hasRestoredRef.current) {
       browseSnapshot(selectedSnapshot, currentPath);
     }
   }, [showChanges]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Navigate up (parent directory)
   const navigateUp = () => {
-    const pathParts = currentPath.split('/').filter(p => p);
-    pathParts.pop();
-    const newPath = pathParts.join('/');
-    browseSnapshot(selectedSnapshot, newPath);
+    const parts = currentPath.split('/').filter(p => p);
+    parts.pop();
+    browseSnapshot(selectedSnapshot, parts.join('/'));
   };
 
-  // Download file
+  const handleSelectServer = (serverId) => {
+    if (String(serverId) === String(selectedServerId)) return;
+    setSelectedServerId(String(serverId));
+    setSelectedJobId('');
+    setCurrentPath('');
+    setItems([]);
+  };
+
   const downloadFile = async (filePath, fileName) => {
     try {
       const response = await api.get(
         `/browse/backup-jobs/${selectedJobId}/snapshots/${selectedSnapshot}/download`,
-        {
-          params: { path: filePath },
-          responseType: 'blob',
-        }
+        { params: { path: filePath }, responseType: 'blob' }
       );
-      
-      // Create download link
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -258,56 +288,40 @@ export default function BrowseBackups() {
     }
   };
 
-  // View file
   const viewFile = async (filePath, fileName, fileSize) => {
-    const MAX_VIEW_SIZE = 10 * 1024 * 1024; // 10MB
-    
+    const MAX_VIEW_SIZE = 10 * 1024 * 1024;
     if (fileSize > MAX_VIEW_SIZE) {
-      setSnackbar({
-        open: true,
-        message: `File too large to view (${formatSize(fileSize)}). Maximum size is 10MB.`,
-        severity: 'error'
-      });
+      setSnackbar({ open: true, message: `File too large to view (${formatSize(fileSize)}). Maximum size is 10MB.`, severity: 'error' });
       return;
     }
-    
     try {
       setViewLoading(true);
       const response = await api.get(
         `/browse/backup-jobs/${selectedJobId}/snapshots/${selectedSnapshot}/view`,
         { params: { path: filePath } }
       );
-      
       setViewFileContent(response.data.content);
       setViewFileName(response.data.filename);
       setViewFileSize(response.data.size);
       setViewModalOpen(true);
     } catch (err) {
-      const errorMsg = err.response?.data?.detail || 'Failed to view file';
-      setSnackbar({ open: true, message: errorMsg, severity: 'error' });
+      setSnackbar({ open: true, message: err.response?.data?.detail || 'Failed to view file', severity: 'error' });
     } finally {
       setViewLoading(false);
     }
   };
 
-  // Copy file content to clipboard
   const copyToClipboard = () => {
     navigator.clipboard.writeText(viewFileContent);
     setSnackbar({ open: true, message: 'Content copied to clipboard!', severity: 'success' });
   };
 
-  // Download folder as zip
   const downloadFolderZip = async (folderPath, folderName) => {
     try {
       const response = await api.get(
         `/browse/backup-jobs/${selectedJobId}/snapshots/${selectedSnapshot}/download-zip`,
-        {
-          params: { path: folderPath },
-          responseType: 'blob',
-        }
+        { params: { path: folderPath }, responseType: 'blob' }
       );
-      
-      // Create download link
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -321,12 +335,8 @@ export default function BrowseBackups() {
     }
   };
 
-  // Download entire snapshot
-  const downloadSnapshot = () => {
-    downloadFolderZip('', jobName);
-  };
+  const downloadSnapshot = () => downloadFolderZip('', jobName);
 
-  // Format file size
   const formatSize = (bytes) => {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -335,51 +345,33 @@ export default function BrowseBackups() {
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
-  // Format date
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString();
-  };
+  const formatDate = (dateString) => new Date(dateString).toLocaleString();
 
-  // Render breadcrumbs
   const renderBreadcrumbs = () => {
     if (!selectedSnapshot) return null;
-    
     const pathParts = currentPath.split('/').filter(p => p);
     const crumbs = [
-      <Link
-        key="root"
-        component="button"
-        variant="body1"
+      <Link key="root" component="button" variant="body1"
         onClick={() => browseSnapshot(selectedSnapshot, '')}
         sx={{ cursor: 'pointer', color: '#14b8a6' }}
       >
         Root
       </Link>
     ];
-
-    let accumulatedPath = '';
+    let acc = '';
     pathParts.forEach((part, index) => {
-      accumulatedPath += (accumulatedPath ? '/' : '') + part;
-      const pathToNavigate = accumulatedPath;
-      
+      acc += (acc ? '/' : '') + part;
+      const dest = acc;
       crumbs.push(
-        <Link
-          key={index}
-          component="button"
-          variant="body1"
-          onClick={() => browseSnapshot(selectedSnapshot, pathToNavigate)}
+        <Link key={index} component="button" variant="body1"
+          onClick={() => browseSnapshot(selectedSnapshot, dest)}
           sx={{ cursor: 'pointer', color: '#14b8a6' }}
         >
           {part}
         </Link>
       );
     });
-
-    return (
-      <Breadcrumbs sx={{ mb: 2 }}>
-        {crumbs}
-      </Breadcrumbs>
-    );
+    return <Breadcrumbs sx={{ mb: 2 }}>{crumbs}</Breadcrumbs>;
   };
 
   return (
@@ -394,95 +386,122 @@ export default function BrowseBackups() {
         </Alert>
       )}
 
-      {/* Job Selection */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
-            <FormControl fullWidth>
-              <InputLabel>Select Backup Job</InputLabel>
-              <Select
-                value={selectedJobId}
-                label="Select Backup Job"
-                onChange={(e) => {
-                  setSelectedJobId(e.target.value);
-                  if (!e.target.value) {
-                    // Clear everything when "None" is selected
-                    setSnapshots([]);
-                    setSelectedSnapshot(null);
-                    setCurrentPath('');
-                    setItems([]);
-                  }
-                }}
-              >
-                <MenuItem value="">
-                  <em>None</em>
-                </MenuItem>
-                {jobs.map((job) => (
-                  <MenuItem key={job.id} value={job.id}>
-                    {job.name} ({job.server?.name || 'Unknown Server'})
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-        </Grid>
-      </Paper>
+      {/* Three-column browser — hidden once a snapshot is open */}
+      {!selectedSnapshot && (
+        <Paper sx={{ overflow: 'hidden' }}>
+          <Box sx={{ display: 'flex', height: 520 }}>
 
-      {/* Snapshots */}
-      {selectedJobId && snapshots.length > 0 && !selectedSnapshot && (
-        <Paper sx={{ p: 3, mb: 3 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              Available Snapshots for {jobName}
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <Chip
-                label={`Total Disk Usage: ${formatSize(totalActualSize)}`}
-                sx={{ backgroundColor: '#14b8a6', color: 'white', fontWeight: 600 }}
-              />
-              {totalSpaceSaved > 0 && (
-                <Chip
-                  label={`Space Saved: ${formatSize(totalSpaceSaved)} (${((totalSpaceSaved / totalLogicalSize) * 100).toFixed(1)}%)`}
-                  sx={{ backgroundColor: '#10b981', color: 'white', fontWeight: 600 }}
-                />
-              )}
+            {/* Column 1: Servers */}
+            <Box sx={{ width: 210, borderRight: '1px solid rgba(148,163,184,0.15)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+              <ColumnHeader>Servers</ColumnHeader>
+              <Box sx={{ flex: 1, overflow: 'auto' }}>
+                {servers.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
+                    No servers configured
+                  </Typography>
+                ) : servers.map(server => (
+                  <ColumnItem
+                    key={server.id}
+                    selected={String(selectedServerId) === String(server.id)}
+                    onClick={() => handleSelectServer(server.id)}
+                  >
+                    <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.3 }}>
+                      {server.name}
+                    </Typography>
+                    {server.hostname && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+                        {server.hostname}
+                      </Typography>
+                    )}
+                  </ColumnItem>
+                ))}
+              </Box>
             </Box>
-          </Box>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            {snapshots.map((snapshot) => (
-              <Grid item xs={12} sm={6} md={4} key={snapshot.name}>
-                <Paper
-                  sx={{
-                    p: 2,
-                    cursor: 'pointer',
-                    border: '1px solid rgba(148, 163, 184, 0.2)',
-                    '&:hover': {
-                      borderColor: '#14b8a6',
-                      backgroundColor: 'rgba(20, 184, 166, 0.05)',
-                    },
-                  }}
-                  onClick={() => browseSnapshot(snapshot.name)}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <CalendarIcon sx={{ mr: 1, color: '#14b8a6' }} />
-                      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+
+            {/* Column 2: Backup Jobs */}
+            <Box sx={{ width: 240, borderRight: '1px solid rgba(148,163,184,0.15)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+              <ColumnHeader>Backup Jobs</ColumnHeader>
+              <Box sx={{ flex: 1, overflow: 'auto' }}>
+                {!selectedServerId ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>Select a server</Typography>
+                ) : serverJobs.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>No jobs for this server</Typography>
+                ) : serverJobs.map(job => (
+                  <ColumnItem
+                    key={job.id}
+                    selected={String(selectedJobId) === String(job.id)}
+                    onClick={() => setSelectedJobId(String(job.id))}
+                  >
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {job.name}
+                    </Typography>
+                    {job.remote_path && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {job.remote_path}
+                      </Typography>
+                    )}
+                  </ColumnItem>
+                ))}
+              </Box>
+            </Box>
+
+            {/* Column 3: Snapshots */}
+            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <ColumnHeader
+                right={selectedJobId && totalSpaceSaved > 0 ? (
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Chip label={`${formatSize(totalActualSize)} on disk`} size="small"
+                      sx={{ height: 20, fontSize: '0.7rem', backgroundColor: 'rgba(20,184,166,0.1)', color: '#14b8a6' }} />
+                    <Chip label={`${formatSize(totalSpaceSaved)} saved`} size="small"
+                      sx={{ height: 20, fontSize: '0.7rem', backgroundColor: 'rgba(16,185,129,0.1)', color: '#10b981' }} />
+                  </Box>
+                ) : null}
+              >
+                Snapshots{snapshots.length > 0 ? ` (${snapshots.length})` : ''}
+              </ColumnHeader>
+              <Box sx={{ flex: 1, overflow: 'auto' }}>
+                {!selectedJobId ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>Select a backup job</Typography>
+                ) : loading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                    <CircularProgress size={28} />
+                  </Box>
+                ) : snapshots.length === 0 ? (
+                  <Alert severity="info" sx={{ m: 2 }}>No snapshots found. Run a backup first.</Alert>
+                ) : snapshots.map((snapshot, idx) => (
+                  <Box
+                    key={snapshot.name}
+                    onClick={() => browseSnapshot(snapshot.name)}
+                    sx={{
+                      px: 2, py: 1.5,
+                      cursor: 'pointer',
+                      borderBottom: idx < snapshots.length - 1 ? '1px solid rgba(148,163,184,0.08)' : 'none',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      '&:hover': { backgroundColor: 'rgba(20,184,166,0.05)' },
+                      transition: 'background-color 0.15s',
+                    }}
+                  >
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
                         {formatDate(snapshot.date)}
                       </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                        {snapshot.name}
+                      </Typography>
                     </Box>
-                    <Chip
-                      label={formatSize(snapshot.size_bytes || 0)}
-                      size="small"
-                      sx={{ backgroundColor: 'rgba(20, 184, 166, 0.1)', color: '#14b8a6' }}
-                    />
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, ml: 1 }}>
+                      <Chip label={formatSize(snapshot.size_bytes || 0)} size="small"
+                        sx={{ backgroundColor: 'rgba(20,184,166,0.1)', color: '#14b8a6' }} />
+                      <ChevronRightIcon sx={{ fontSize: '1.1rem', color: 'text.disabled' }} />
+                    </Box>
                   </Box>
-                  <Typography variant="caption" color="text.secondary">
-                    {snapshot.name}
-                  </Typography>
-                </Paper>
-              </Grid>
-            ))}
-          </Grid>
+                ))}
+              </Box>
+            </Box>
+
+          </Box>
         </Paper>
       )}
 
@@ -492,14 +511,9 @@ export default function BrowseBackups() {
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                Browsing: {jobName} - {formatDate(snapshots.find(s => s.name === selectedSnapshot)?.date)}
+                {jobName} — {formatDate(snapshots.find(s => s.name === selectedSnapshot)?.date || selectedSnapshot)}
               </Typography>
-              <Chip
-                label={selectedSnapshot}
-                size="small"
-                color="primary"
-                sx={{ backgroundColor: '#14b8a6' }}
-              />
+              <Chip label={selectedSnapshot} size="small" color="primary" sx={{ backgroundColor: '#14b8a6' }} />
             </Box>
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
               <FormControlLabel
@@ -509,12 +523,8 @@ export default function BrowseBackups() {
                     onChange={handleToggleChanges}
                     disabled={!hasPreviousSnapshot}
                     sx={{
-                      '& .MuiSwitch-switchBase.Mui-checked': {
-                        color: '#14b8a6',
-                      },
-                      '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                        backgroundColor: '#14b8a6',
-                      },
+                      '& .MuiSwitch-switchBase.Mui-checked': { color: '#14b8a6' },
+                      '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#14b8a6' },
                     }}
                   />
                 }
@@ -525,23 +535,12 @@ export default function BrowseBackups() {
                   </Box>
                 }
               />
-              <Button
-                variant="outlined"
-                startIcon={<FolderZipIcon />}
-                onClick={downloadSnapshot}
-                sx={{ borderColor: '#14b8a6', color: '#14b8a6' }}
-              >
+              <Button variant="outlined" startIcon={<FolderZipIcon />} onClick={downloadSnapshot}
+                sx={{ borderColor: '#14b8a6', color: '#14b8a6' }}>
                 Download All
               </Button>
-              <Button
-                variant="outlined"
-                startIcon={<ArrowBackIcon />}
-                onClick={() => {
-                  setSelectedSnapshot(null);
-                  setCurrentPath('');
-                  setItems([]);
-                }}
-              >
+              <Button variant="outlined" startIcon={<ArrowBackIcon />}
+                onClick={() => { setSelectedSnapshot(null); setCurrentPath(''); setItems([]); }}>
                 Back to Snapshots
               </Button>
             </Box>
@@ -595,40 +594,18 @@ export default function BrowseBackups() {
                           </Box>
                           <Box>
                             {item.change_status === 'new' && (
-                              <Chip
-                                icon={<NewIcon />}
-                                label="New"
-                                size="small"
-                                sx={{
-                                  backgroundColor: 'rgba(16, 185, 129, 0.2)',
-                                  color: '#10b981',
-                                  border: '1px solid #10b981',
-                                  fontWeight: 600,
-                                  fontSize: '0.7rem'
-                                }}
-                              />
+                              <Chip icon={<NewIcon />} label="New" size="small"
+                                sx={{ backgroundColor: 'rgba(16,185,129,0.2)', color: '#10b981', border: '1px solid #10b981', fontWeight: 600, fontSize: '0.7rem' }} />
                             )}
                             {item.change_status === 'modified' && (
-                              <Chip
-                                icon={<EditIcon />}
-                                label="Modified"
-                                size="small"
-                                sx={{
-                                  backgroundColor: 'rgba(245, 158, 11, 0.2)',
-                                  color: '#f59e0b',
-                                  border: '1px solid #f59e0b',
-                                  fontWeight: 600,
-                                  fontSize: '0.7rem'
-                                }}
-                              />
+                              <Chip icon={<EditIcon />} label="Modified" size="small"
+                                sx={{ backgroundColor: 'rgba(245,158,11,0.2)', color: '#f59e0b', border: '1px solid #f59e0b', fontWeight: 600, fontSize: '0.7rem' }} />
                             )}
                           </Box>
                         </Box>
                       </TableCell>
                       <TableCell>
-                        <Chip
-                          label={item.type}
-                          size="small"
+                        <Chip label={item.type} size="small"
                           color={item.type === 'directory' ? 'primary' : 'default'}
                           sx={item.type === 'directory' ? { backgroundColor: '#14b8a6' } : {}}
                         />
@@ -638,15 +615,11 @@ export default function BrowseBackups() {
                       <TableCell align="right">
                         {item.type === 'file' ? (
                           <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
-                            <Tooltip title={item.size > 10 * 1024 * 1024 ? `File too large to view (${formatSize(item.size)}, max 10MB)` : "View File"}>
+                            <Tooltip title={item.size > 10 * 1024 * 1024 ? `File too large to view (${formatSize(item.size)}, max 10MB)` : 'View File'}>
                               <span>
-                                <IconButton
-                                  size="small"
+                                <IconButton size="small"
                                   disabled={item.size > 10 * 1024 * 1024 || viewLoading}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    viewFile(item.path, item.name, item.size);
-                                  }}
+                                  onClick={(e) => { e.stopPropagation(); viewFile(item.path, item.name, item.size); }}
                                   sx={{ color: '#14b8a6' }}
                                 >
                                   {viewLoading ? <CircularProgress size={20} /> : <VisibilityIcon />}
@@ -654,12 +627,8 @@ export default function BrowseBackups() {
                               </span>
                             </Tooltip>
                             <Tooltip title="Download File">
-                              <IconButton
-                                size="small"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  downloadFile(item.path, item.name);
-                                }}
+                              <IconButton size="small"
+                                onClick={(e) => { e.stopPropagation(); downloadFile(item.path, item.name); }}
                                 sx={{ color: '#14b8a6' }}
                               >
                                 <DownloadIcon />
@@ -668,12 +637,8 @@ export default function BrowseBackups() {
                           </Box>
                         ) : (
                           <Tooltip title="Download Folder as ZIP">
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                downloadFolderZip(item.path, item.name);
-                              }}
+                            <IconButton size="small"
+                              onClick={(e) => { e.stopPropagation(); downloadFolderZip(item.path, item.name); }}
                               sx={{ color: '#14b8a6' }}
                             >
                               <FolderZipIcon />
@@ -686,9 +651,7 @@ export default function BrowseBackups() {
                   {items.length === 0 && !loading && (
                     <TableRow>
                       <TableCell colSpan={5} align="center">
-                        <Typography color="text.secondary">
-                          This directory is empty
-                        </Typography>
+                        <Typography color="text.secondary">This directory is empty</Typography>
                       </TableCell>
                     </TableRow>
                   )}
@@ -699,70 +662,34 @@ export default function BrowseBackups() {
         </Paper>
       )}
 
-      {selectedJobId && snapshots.length === 0 && !loading && (
-        <Alert severity="info">
-          No snapshots found for this backup job. Run a backup first.
-        </Alert>
-      )}
-
       {/* File Viewer Modal */}
-      <Dialog
-        open={viewModalOpen}
-        onClose={() => setViewModalOpen(false)}
-        maxWidth="md"
-        fullWidth
-      >
+      <Dialog open={viewModalOpen} onClose={() => setViewModalOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="h6">{viewFileName}</Typography>
-            <Chip
-              label={formatSize(viewFileSize)}
-              size="small"
-              sx={{ backgroundColor: '#14b8a6', color: 'white' }}
-            />
+            <Chip label={formatSize(viewFileSize)} size="small" sx={{ backgroundColor: '#14b8a6', color: 'white' }} />
           </Box>
         </DialogTitle>
         <DialogContent>
-          <Paper
-            sx={{
-              p: 2,
-              backgroundColor: '#1e1e1e',
-              color: '#d4d4d4',
-              fontFamily: 'monospace',
-              fontSize: '0.85rem',
-              maxHeight: '400px',
-              overflow: 'auto',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-all'
-            }}
-          >
+          <Paper sx={{ p: 2, backgroundColor: '#1e1e1e', color: '#d4d4d4', fontFamily: 'monospace', fontSize: '0.85rem', maxHeight: '400px', overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
             {viewFileContent || 'No content available'}
           </Paper>
         </DialogContent>
         <DialogActions>
-          <Button
-            startIcon={<ContentCopyIcon />}
-            onClick={copyToClipboard}
-            sx={{ color: '#14b8a6' }}
-          >
+          <Button startIcon={<ContentCopyIcon />} onClick={copyToClipboard} sx={{ color: '#14b8a6' }}>
             Copy to Clipboard
           </Button>
           <Button onClick={() => setViewModalOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
 
-      {/* Snackbar for notifications */}
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
         onClose={() => setSnackbar({ ...snackbar, open: false })}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
-        <Alert
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity={snackbar.severity}
-          sx={{ width: '100%' }}
-        >
+        <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
           {snackbar.message}
         </Alert>
       </Snackbar>
