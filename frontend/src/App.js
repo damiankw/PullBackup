@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import { Box, CircularProgress } from '@mui/material';
 import { AuthProvider, useAuth } from './AuthContext';
+import api from './api';
 
 // Pages
 import Login from './pages/Login';
+import Setup from './pages/Setup';
 import Dashboard from './pages/Dashboard';
 import Servers from './pages/Servers';
 import SSHKeys from './pages/SSHKeys';
@@ -189,19 +192,49 @@ function PrivateRoute({ children }) {
 }
 
 function App() {
+  const [setupComplete, setSetupComplete] = useState(null); // null = checking
+
+  useEffect(() => {
+    api.get('/setup/status')
+      .then((res) => setSetupComplete(res.data.completed))
+      .catch(() => setSetupComplete(true)); // fail open — don't block on error
+  }, []);
+
+  if (setupComplete === null) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#0f172a' }}>
+          <CircularProgress sx={{ color: '#14b8a6' }} />
+        </Box>
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <AuthProvider>
         <BrowserRouter>
           <Routes>
-            <Route path="/login" element={<Login />} />
+            <Route
+              path="/setup"
+              element={
+                setupComplete
+                  ? <Navigate to="/login" replace />
+                  : <Setup onComplete={() => setSetupComplete(true)} />
+              }
+            />
+            <Route
+              path="/login"
+              element={setupComplete ? <Login /> : <Navigate to="/setup" replace />}
+            />
             <Route
               path="/"
               element={
-                <PrivateRoute>
-                  <Layout />
-                </PrivateRoute>
+                !setupComplete
+                  ? <Navigate to="/setup" replace />
+                  : <PrivateRoute><Layout /></PrivateRoute>
               }
             >
               <Route index element={<Dashboard />} />

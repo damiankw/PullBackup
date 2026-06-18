@@ -9,11 +9,9 @@ import {
   Divider,
   Alert,
 } from '@mui/material';
-import { useAuth } from '../AuthContext';
 import api from '../api';
 
 export default function Profile() {
-  const { user } = useAuth();
   const [profile, setProfile] = useState(null);
   const [emailForm, setEmailForm] = useState({ email: '' });
   const [passwordForm, setPasswordForm] = useState({

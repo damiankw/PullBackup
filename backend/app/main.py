@@ -10,7 +10,7 @@ from app.core.database import engine, Base
 from app.core.config import settings
 from app.core.migrations import run_migrations
 from app.core.logging_config import setup_logging
-from app.api import auth, servers, ssh_keys, backup_jobs, backup_history, dashboard, users, browse, system, email, audit, terminal
+from app.api import auth, servers, ssh_keys, backup_jobs, backup_history, dashboard, users, browse, system, email, audit, terminal, setup
 from app.services.scheduler import backup_scheduler
 
 FRONTEND_DIR = Path(__file__).parent.parent / 'frontend_build'
@@ -28,10 +28,23 @@ async def lifespan(app: FastAPI):
     
     # Run database migrations first
     run_migrations()
-    
+
     # Create database tables
     Base.metadata.create_all(bind=engine)
-    
+
+    # Load persisted settings from DB
+    from app.core.database import SessionLocal
+    from app.models.models import SystemSettings
+    db = SessionLocal()
+    try:
+        for key, attr in [("backup_root_dir", "BACKUP_ROOT_DIR"), ("secret_key", "SECRET_KEY")]:
+            row = db.query(SystemSettings).filter(SystemSettings.key == key).first()
+            if row and row.value:
+                setattr(settings, attr, row.value)
+                logger.info(f"Loaded {key} from DB")
+    finally:
+        db.close()
+
     # Reload scheduled jobs
     backup_scheduler.reload_all_jobs()
     
@@ -72,6 +85,7 @@ app.include_router(system.router, prefix="/api/system", tags=["System"])
 app.include_router(email.router, prefix="/api/email", tags=["Email"])
 app.include_router(audit.router, prefix="/api/audit-logs", tags=["Audit Logs"])
 app.include_router(terminal.router, prefix="/api/terminal", tags=["Terminal"])
+app.include_router(setup.router, prefix="/api/setup", tags=["Setup"])
 
 
 @app.get("/health")

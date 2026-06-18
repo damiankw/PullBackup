@@ -72,7 +72,7 @@ export default function BackupHistory() {
     fetchHistory();
     const interval = setInterval(fetchHistory, 10000); // Refresh every 10 seconds
     return () => clearInterval(interval);
-  }, [page, rowsPerPage, filters]);
+  }, [page, rowsPerPage, filters]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchBackupJobs = async () => {
     try {

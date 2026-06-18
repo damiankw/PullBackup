@@ -25,6 +25,9 @@ def run_migrations():
         # Migration 3: Add volatile files tracking columns
         _add_volatile_files_columns(conn)
 
+        # Migration 4: Create system_settings table
+        _create_system_settings_table(conn)
+
         conn.commit()
 
     logger.info("Database migrations completed")
@@ -84,6 +87,23 @@ def _add_volatile_files_columns(conn):
                 logger.info(f"Adding {col} column to backup_history...")
                 conn.execute(text(f"ALTER TABLE backup_history ADD COLUMN {col} TEXT"))
                 logger.info(f"✓ Added {col} to backup_history")
+
+
+def _create_system_settings_table(conn):
+    """Create system_settings table if it doesn't exist."""
+    inspector = inspect(engine)
+    if 'system_settings' in inspector.get_table_names():
+        logger.info("✓ system_settings table already exists")
+        return
+    logger.info("Creating system_settings table...")
+    conn.execute(text("""
+        CREATE TABLE system_settings (
+            key VARCHAR(100) PRIMARY KEY,
+            value TEXT,
+            updated_at TIMESTAMP
+        )
+    """))
+    logger.info("✓ Created system_settings table")
 
 
 def _add_public_key_content_column(conn):

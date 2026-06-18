@@ -222,7 +222,7 @@ export default function BrowseBackups() {
     if (selectedSnapshot && hasRestoredRef.current) {
       browseSnapshot(selectedSnapshot, currentPath);
     }
-  }, [showChanges]);
+  }, [showChanges]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Navigate up (parent directory)
   const navigateUp = () => {

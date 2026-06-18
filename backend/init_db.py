@@ -70,7 +70,6 @@ if __name__ == "__main__":
     
     create_directories()
     init_db()
-    create_admin_user()
     
     print("=" * 50)
     print("✓ Initialization complete!")

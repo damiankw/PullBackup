@@ -10,7 +10,6 @@ import {
   TableRow,
   Typography,
   Chip,
-  TableSortLabel,
   Tooltip,
   Select,
   MenuItem,
@@ -25,7 +24,6 @@ import {
 } from '@mui/material';
 import {
   FilterList as FilterListIcon,
-  ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
 } from '@mui/icons-material';
 import api from '../api';
@@ -51,7 +49,7 @@ export default function AuditLogs() {
     if (user?.role === 'admin') {
       fetchStats();
     }
-  }, [filters, user]);
+  }, [filters, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchLogs = async () => {
     try {

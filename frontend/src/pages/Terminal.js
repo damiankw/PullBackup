@@ -121,7 +121,7 @@ export default function TerminalPage() {
     if (servers && servers.length && !selected) {
       setSelected(servers[0].id);
     }
-  }, [servers]);
+  }, [servers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const connect = () => {
     if (!selected) return;

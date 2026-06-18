@@ -120,7 +120,7 @@ export default function SSHKeys() {
   const handleGeneratePublicKey = async (key) => {
     if (window.confirm(`Generate public key for "${key.name}"?\n\nThis will extract the public key from the private key file.`)) {
       try {
-        const response = await api.post(`/ssh-keys/${key.id}/generate-public-key`);
+        await api.post(`/ssh-keys/${key.id}/generate-public-key`);
         fetchKeys();
         alert('Public key generated successfully!');
       } catch (error) {
