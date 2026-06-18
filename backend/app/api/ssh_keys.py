@@ -5,7 +5,7 @@ from typing import List
 from app.core.database import get_db
 from app.api.deps import get_current_active_user
 from app.models.models import User, SSHKey, AuditAction
-from app.schemas.schemas import SSHKeyCreate, SSHKeyUpdate, SSHKey as SSHKeySchema
+from app.schemas.schemas import SSHKeyCreate, SSHKeyUpdate, SSHKeyGenerate, SSHKey as SSHKeySchema
 from app.services.rsync_service import rsync_service
 from app.services.audit_service import audit_service
 
@@ -272,5 +272,80 @@ def generate_public_key_for_key(
         resource_name=key.name,
         description=f"Generated public key for SSH key '{key.name}'"
     )
-    
+
     return key
+
+
+@router.post("/generate", response_model=SSHKeySchema, status_code=status.HTTP_201_CREATED)
+def generate_ssh_key(
+    key_data: SSHKeyGenerate,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Generate a new SSH key pair on the server."""
+    import subprocess
+    import tempfile
+    import os
+
+    allowed_types = {"ed25519", "rsa", "ecdsa"}
+    if key_data.key_type not in allowed_types:
+        raise HTTPException(status_code=400, detail=f"key_type must be one of: {', '.join(allowed_types)}")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        key_path = os.path.join(tmpdir, "id_key")
+
+        cmd = ["ssh-keygen", "-t", key_data.key_type, "-f", key_path, "-N", "", "-C", f"pullbackup/{key_data.name}"]
+        if key_data.key_type == "rsa":
+            cmd += ["-b", "4096"]
+        elif key_data.key_type == "ecdsa":
+            cmd += ["-b", "521"]
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        except subprocess.TimeoutExpired:
+            raise HTTPException(status_code=504, detail="ssh-keygen timed out")
+
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail=f"ssh-keygen failed: {result.stderr.strip()}")
+
+        private_key_content = open(key_path).read()
+        public_key_content = open(key_path + ".pub").read().strip()
+
+    try:
+        key_file_path, _ = rsync_service.save_ssh_key(
+            key_name=key_data.name,
+            private_key_content=private_key_content,
+            owner_id=current_user.id,
+            public_key_content=public_key_content,
+        )
+
+        fingerprint = rsync_service.get_ssh_key_fingerprint(key_file_path)
+
+        ssh_key = SSHKey(
+            name=key_data.name,
+            fingerprint=fingerprint,
+            key_file_path=key_file_path,
+            public_key_content=public_key_content,
+            is_public=key_data.is_public,
+            owner_id=current_user.id,
+        )
+        db.add(ssh_key)
+        db.commit()
+        db.refresh(ssh_key)
+
+        audit_service.log_from_request(
+            db=db,
+            request=request,
+            action=AuditAction.CREATE,
+            user=current_user,
+            resource_type="ssh_key",
+            resource_id=ssh_key.id,
+            resource_name=ssh_key.name,
+            description=f"Generated {key_data.key_type.upper()} SSH key '{ssh_key.name}' (fingerprint: {fingerprint})",
+        )
+
+        return ssh_key
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save generated key: {str(e)}")

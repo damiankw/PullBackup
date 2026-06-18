@@ -90,6 +90,12 @@ class SSHKeyUpdate(BaseModel):
     public_key: Optional[str] = None
 
 
+class SSHKeyGenerate(BaseModel):
+    name: str
+    key_type: str = "ed25519"  # ed25519, rsa, ecdsa
+    is_public: bool = False
+
+
 class SSHKey(SSHKeyBase):
     id: int
     fingerprint: Optional[str] = None
