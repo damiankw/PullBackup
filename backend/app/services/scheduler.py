@@ -103,7 +103,8 @@ def execute_scheduled_backup(backup_job_id: int):
         
         # Get server info
         server = backup_job.server
-        ssh_key_path = server.ssh_key.key_file_path if server.ssh_key else None
+        ssh_key = server.ssh_key
+        ssh_key_path = ssh_key.key_file_path if ssh_key else None
         current_volatile = _json.loads(backup_job.volatile_files or '[]')
 
         # Execute backup
@@ -122,9 +123,12 @@ def execute_scheduled_backup(backup_job_id: int):
                 backup_uuid=backup_job.backup_uuid,
                 job_name=backup_job.name,
                 server_name=server.name,
+                server_description=server.description,
                 schedule=backup_job.schedule,
                 volatile_files=current_volatile,
                 host_key=server.host_key,
+                ssh_key_name=ssh_key.name if ssh_key else None,
+                ssh_key_fingerprint=ssh_key.fingerprint if ssh_key else None,
             )
         except Exception as exec_error:
             success = False

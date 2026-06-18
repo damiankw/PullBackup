@@ -179,9 +179,12 @@ class RsyncService:
         backup_uuid: Optional[str] = None,
         job_name: Optional[str] = None,
         server_name: Optional[str] = None,
+        server_description: Optional[str] = None,
         schedule: Optional[str] = None,
         volatile_files: Optional[List[str]] = None,
         host_key: Optional[str] = None,
+        ssh_key_name: Optional[str] = None,
+        ssh_key_fingerprint: Optional[str] = None,
     ) -> Tuple[bool, str, dict]:
         """
         Execute incremental rsync backup from remote server to local path.
@@ -216,19 +219,45 @@ class RsyncService:
             base_backup_dir.mkdir(parents=True, exist_ok=True)
 
             readme = base_backup_dir / "README.md"
-            if not readme.exists():
-                readme.write_text(
-                    f"# {job_name or 'Backup Job'}\n\n"
-                    f"| | |\n"
-                    f"|---|---|\n"
-                    f"| **Server** | {server_name or hostname} |\n"
-                    f"| **Host** | {hostname}:{port} |\n"
-                    f"| **Remote path** | {remote_path} |\n"
-                    f"| **Schedule** | {schedule or 'manual'} |\n"
-                    f"| **UUID** | {backup_uuid} |\n\n"
-                    f"Each subdirectory is a dated snapshot (`YYYY-MM-DD_HH-MM-SS`). "
-                    f"Unchanged files are hardlinked from the previous snapshot to save space.\n"
-                )
+            lines = [
+                f"# {job_name or 'Backup Job'}",
+                "",
+                "## Job",
+                "",
+                "| | |",
+                "|---|---|",
+                f"| **Name** | {job_name or '—'} |",
+                f"| **Schedule** | `{schedule}` |" if schedule else "| **Schedule** | manual |",
+                f"| **Remote path** | `{remote_path}` |",
+                f"| **rsync options** | `{rsync_options or 'default'}` |",
+                f"| **UUID** | `{backup_uuid}` |",
+                "",
+                "## Server",
+                "",
+                "| | |",
+                "|---|---|",
+                f"| **Name** | {server_name or hostname} |",
+                f"| **Host** | `{hostname}:{port}` |",
+                f"| **User** | `{username}` |",
+            ]
+            if server_description:
+                lines.append(f"| **Description** | {server_description} |")
+            lines += [
+                "",
+                "## SSH Key",
+                "",
+                "| | |",
+                "|---|---|",
+                f"| **Name** | {ssh_key_name or '—'} |",
+                f"| **Fingerprint** | `{ssh_key_fingerprint}` |" if ssh_key_fingerprint else "| **Fingerprint** | — |",
+                "",
+                "---",
+                "",
+                "Each subdirectory is a dated snapshot (`YYYY-MM-DD_HH-MM-SS`). "
+                "Unchanged files are hardlinked from the previous snapshot to save space.",
+                f"\n_Last updated by PullBackup: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_",
+            ]
+            readme.write_text("\n".join(lines))
 
             # Find previous snapshot for hardlinking BEFORE creating new snapshot
             previous_snapshot = self._find_latest_snapshot(base_backup_dir)
