@@ -96,6 +96,8 @@ The `/api/terminal/ws/{server_id}` WebSocket endpoint (terminal.py) opens a real
 
 **Recommended mitigation**: Consider removing this feature, gating it behind additional approval workflows, or making it read-only. At minimum, log every command executed.
 
+> **RESOLVED** (partial): Terminal session open and close events are now written to the audit_logs table, including the user, target server, source IP address (with proxy header support), user agent, and session duration. Full command logging is left to the SSH server on the remote end (e.g. bash history, syslog).
+
 **7. Authentication token passed in WebSocket query parameter**
 
 The terminal WebSocket accepts the JWT via `?token=...` in the URL.
