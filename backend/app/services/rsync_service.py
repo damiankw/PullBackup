@@ -214,7 +214,22 @@ class RsyncService:
             
             base_backup_dir = self.backup_root / backup_uuid
             base_backup_dir.mkdir(parents=True, exist_ok=True)
-            
+
+            readme = base_backup_dir / "README.md"
+            if not readme.exists():
+                readme.write_text(
+                    f"# {job_name or 'Backup Job'}\n\n"
+                    f"| | |\n"
+                    f"|---|---|\n"
+                    f"| **Server** | {server_name or hostname} |\n"
+                    f"| **Host** | {hostname}:{port} |\n"
+                    f"| **Remote path** | {remote_path} |\n"
+                    f"| **Schedule** | {schedule or 'manual'} |\n"
+                    f"| **UUID** | {backup_uuid} |\n\n"
+                    f"Each subdirectory is a dated snapshot (`YYYY-MM-DD_HH-MM-SS`). "
+                    f"Unchanged files are hardlinked from the previous snapshot to save space.\n"
+                )
+
             # Find previous snapshot for hardlinking BEFORE creating new snapshot
             previous_snapshot = self._find_latest_snapshot(base_backup_dir)
             
