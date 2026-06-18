@@ -30,7 +30,9 @@ import {
   Delete as DeleteIcon,
   Edit as EditIcon,
   CheckCircle as CheckCircleIcon,
+  VpnKey as VpnKeyIcon,
 } from '@mui/icons-material';
+import Tooltip from '@mui/material/Tooltip';
 import api from '../api';
 
 export default function Servers() {
@@ -42,6 +44,7 @@ export default function Servers() {
   const [order, setOrder] = useState('asc');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const [testingServerId, setTestingServerId] = useState(null);
+  const [scanningServerId, setScanningServerId] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     hostname: '',
@@ -144,6 +147,19 @@ export default function Servers() {
     }
   };
 
+  const handleScanHostKey = async (server) => {
+    setScanningServerId(server.id);
+    try {
+      const res = await api.post(`/servers/${server.id}/scan-host-key`);
+      fetchServers();
+      setSnackbar({ open: true, message: res.data.message, severity: 'success' });
+    } catch (error) {
+      setSnackbar({ open: true, message: error.response?.data?.detail || 'Host key scan failed', severity: 'error' });
+    } finally {
+      setScanningServerId(null);
+    }
+  };
+
   const handleSort = (property) => {
     const isAsc = orderBy === property && order === 'asc';
     setOrder(isAsc ? 'desc' : 'asc');
@@ -226,6 +242,7 @@ export default function Servers() {
                   Status
                 </TableSortLabel>
               </TableCell>
+              <TableCell>Host Key</TableCell>
               <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -254,19 +271,42 @@ export default function Servers() {
                   )}
                 </TableCell>
                 <TableCell>
-                  <IconButton 
-                    size="small" 
-                    onClick={() => handleTestConnection(server)}
-                    disabled={testingServerId === server.id}
-                  >
-                    <CheckCircleIcon />
-                  </IconButton>
-                  <IconButton size="small" onClick={() => handleOpen(server)}>
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton size="small" onClick={() => handleDelete(server.id)}>
-                    <DeleteIcon />
-                  </IconButton>
+                  {server.host_key ? (
+                    <Chip label="Verified" color="success" size="small" />
+                  ) : (
+                    <Chip label="Not Scanned" size="small" />
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Tooltip title="Test Connection">
+                    <IconButton
+                      size="small"
+                      onClick={() => handleTestConnection(server)}
+                      disabled={testingServerId === server.id}
+                    >
+                      <CheckCircleIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title={server.host_key ? 'Re-scan Host Key' : 'Scan Host Key'}>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleScanHostKey(server)}
+                      disabled={scanningServerId === server.id}
+                      color={server.host_key ? 'success' : 'default'}
+                    >
+                      <VpnKeyIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Edit">
+                    <IconButton size="small" onClick={() => handleOpen(server)}>
+                      <EditIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Delete">
+                    <IconButton size="small" onClick={() => handleDelete(server.id)}>
+                      <DeleteIcon />
+                    </IconButton>
+                  </Tooltip>
                 </TableCell>
               </TableRow>
             ))}

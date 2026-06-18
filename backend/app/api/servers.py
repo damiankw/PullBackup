@@ -235,7 +235,8 @@ def test_server_connection(
         hostname=server.hostname,
         port=server.port,
         username=server.username,
-        ssh_key_path=ssh_key_path
+        ssh_key_path=ssh_key_path,
+        host_key=server.host_key,
     )
     
     # Update server record
@@ -248,3 +249,46 @@ def test_server_connection(
         "message": message,
         "tested_at": server.last_connection_test
     }
+
+
+@router.post("/{server_id}/scan-host-key")
+def scan_server_host_key(
+    server_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Scan and store the server SSH host key (trust-on-first-use)."""
+    import subprocess
+
+    server = db.query(Server).filter(Server.id == server_id).first()
+
+    if not server:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
+
+    if server.owner_id != current_user.id and current_user.role.value != 'admin':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    try:
+        cmd = ["ssh-keyscan", "-p", str(server.port), "-T", "10", server.hostname]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+
+        key_lines = [l for l in result.stdout.splitlines() if l.strip() and not l.startswith('#')]
+
+        if not key_lines:
+            detail = result.stderr.strip() or "No host key returned"
+            raise HTTPException(status_code=502, detail=f"ssh-keyscan failed: {detail}")
+
+        server.host_key = "\n".join(key_lines)
+        db.commit()
+
+        return {
+            "success": True,
+            "message": f"Host key scanned and stored ({len(key_lines)} key type(s))",
+            "key_types": len(key_lines),
+        }
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="ssh-keyscan timed out")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to scan host key: {str(e)}")

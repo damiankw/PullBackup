@@ -86,6 +86,8 @@ Multiple locations (rsync_service.py, terminal.py) invoke `ssh` with:
 
 **Recommended mitigation**: Implement proper host key verification. Store known host keys or require explicit opt-in with strong warnings.
 
+> **RESOLVED**: A "Scan Host Key" button on the Servers page runs `ssh-keyscan` and stores the result in the database (trust-on-first-use). All SSH connections — rsync backups (both passes), connection tests, and the interactive terminal — now use `StrictHostKeyChecking=yes` with a per-connection temp known_hosts file when a host key is stored. Servers without a scanned key fall back to `StrictHostKeyChecking=no` to preserve backwards compatibility, with the "Not Scanned" status visible in the UI prompting the operator to scan.
+
 **6. Interactive Terminal feature provides full remote shells**
 
 The `/api/terminal/ws/{server_id}` WebSocket endpoint (terminal.py) opens a real pseudo-tty SSH session to any configured server for admin users.

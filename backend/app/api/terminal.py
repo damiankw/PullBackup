@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 import asyncio
 import os
 import subprocess
+import tempfile
 import threading
 
 from app.core.database import SessionLocal
@@ -50,15 +51,22 @@ async def websocket_ssh(websocket: WebSocket, server_id: int, token: str = Query
 
         ssh_key_path = server.ssh_key.key_file_path if server.ssh_key else None
 
+        # Write host key to a temp known_hosts file if stored; else fall back to no-check
+        temp_known_hosts = None
+        if server.host_key:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.known_hosts', delete=False) as f:
+                f.write(server.host_key.strip() + '\n')
+                temp_known_hosts = f.name
+
         # Open a pseudo-tty for the ssh process
         master_fd, slave_fd = os.openpty()
 
-        cmd = [
-            'ssh',
-            '-o', 'StrictHostKeyChecking=no',
-            '-o', 'UserKnownHostsFile=/dev/null',
-            '-p', str(server.port)
-        ]
+        cmd = ['ssh']
+        if temp_known_hosts:
+            cmd += ['-o', 'StrictHostKeyChecking=yes', '-o', f'UserKnownHostsFile={temp_known_hosts}']
+        else:
+            cmd += ['-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null']
+        cmd += ['-p', str(server.port)]
         if ssh_key_path:
             cmd.extend(['-i', ssh_key_path])
         cmd.append(f"{server.username}@{server.hostname}")
@@ -121,5 +129,10 @@ async def websocket_ssh(websocket: WebSocket, server_id: int, token: str = Query
                 os.close(master_fd)
             except Exception:
                 pass
+            if temp_known_hosts:
+                try:
+                    os.unlink(temp_known_hosts)
+                except OSError:
+                    pass
     finally:
         db.close()

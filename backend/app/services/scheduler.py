@@ -124,6 +124,7 @@ def execute_scheduled_backup(backup_job_id: int):
                 server_name=server.name,
                 schedule=backup_job.schedule,
                 volatile_files=current_volatile,
+                host_key=server.host_key,
             )
         except Exception as exec_error:
             success = False

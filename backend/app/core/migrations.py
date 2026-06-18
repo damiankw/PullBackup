@@ -28,6 +28,9 @@ def run_migrations():
         # Migration 4: Create system_settings table
         _create_system_settings_table(conn)
 
+        # Migration 5: Add host_key column to servers
+        _add_server_host_key_column(conn)
+
         conn.commit()
 
     logger.info("Database migrations completed")
@@ -104,6 +107,20 @@ def _create_system_settings_table(conn):
         )
     """))
     logger.info("✓ Created system_settings table")
+
+
+def _add_server_host_key_column(conn):
+    """Add host_key column to servers table if it doesn't exist."""
+    inspector = inspect(engine)
+    if 'servers' not in inspector.get_table_names():
+        return
+    existing = [col['name'] for col in inspector.get_columns('servers')]
+    if 'host_key' not in existing:
+        logger.info("Adding host_key column to servers...")
+        conn.execute(text("ALTER TABLE servers ADD COLUMN host_key TEXT"))
+        logger.info("✓ Added host_key to servers")
+    else:
+        logger.info("✓ host_key column already exists in servers")
 
 
 def _add_public_key_content_column(conn):

@@ -123,6 +123,7 @@ class ServerUpdate(BaseModel):
     description: Optional[str] = None
     ssh_key_id: Optional[int] = None
     is_active: Optional[bool] = None
+    host_key: Optional[str] = None
 
 
 class Server(ServerBase):
@@ -130,6 +131,7 @@ class Server(ServerBase):
     is_active: bool
     last_connection_test: Optional[datetime] = None
     connection_test_success: Optional[bool] = None
+    host_key: Optional[str] = None
     owner_id: int
     created_at: datetime
     updated_at: Optional[datetime] = None

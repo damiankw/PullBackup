@@ -1,7 +1,9 @@
 import json
 import os
 import re
+import shlex
 import subprocess
+import tempfile
 from typing import List, Optional, Tuple
 from datetime import datetime
 from pathlib import Path
@@ -20,52 +22,70 @@ class RsyncService:
         self.backup_root.mkdir(parents=True, exist_ok=True)
         self.ssh_keys_dir.mkdir(parents=True, exist_ok=True)
     
+    def _write_known_hosts(self, host_key: str) -> str:
+        """Write host_key lines to a temp file and return its path."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.known_hosts', delete=False) as f:
+            f.write(host_key.strip() + '\n')
+            return f.name
+
+    def _ssh_host_opts(self, host_key: Optional[str], temp_path: Optional[str]) -> List[str]:
+        """Return SSH -o options list for host key checking."""
+        if host_key and temp_path:
+            return [
+                "-o", "StrictHostKeyChecking=yes",
+                "-o", f"UserKnownHostsFile={temp_path}",
+            ]
+        return ["-o", "StrictHostKeyChecking=no"]
+
     def test_connection(
         self,
         hostname: str,
         port: int,
         username: str,
-        ssh_key_path: Optional[str] = None
+        ssh_key_path: Optional[str] = None,
+        host_key: Optional[str] = None,
     ) -> Tuple[bool, str]:
         """
         Test SSH connection to a remote server.
-        
+
         Returns:
             Tuple of (success, message)
         """
+        temp_known_hosts = None
         try:
-            cmd = [
-                "ssh",
-                "-o", "StrictHostKeyChecking=no",
+            if host_key:
+                temp_known_hosts = self._write_known_hosts(host_key)
+
+            cmd = ["ssh"] + self._ssh_host_opts(host_key, temp_known_hosts) + [
                 "-o", "ConnectTimeout=10",
                 "-o", "BatchMode=yes",
                 "-p", str(port),
             ]
-            
+
             if ssh_key_path:
-                # Set proper permissions on key file
                 os.chmod(ssh_key_path, 0o600)
                 cmd.extend(["-i", ssh_key_path])
-            
+
             cmd.append(f"{username}@{hostname}")
             cmd.append("echo 'Connection successful'")
-            
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=15
-            )
-            
+
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+
             if result.returncode == 0:
                 return True, "Connection successful"
             else:
                 return False, f"Connection failed: {result.stderr}"
-                
+
         except subprocess.TimeoutExpired:
             return False, "Connection timeout"
         except Exception as e:
             return False, f"Connection error: {str(e)}"
+        finally:
+            if temp_known_hosts:
+                try:
+                    os.unlink(temp_known_hosts)
+                except OSError:
+                    pass
     
     def _find_latest_snapshot(self, base_path: Path) -> Optional[Path]:
         """
@@ -161,6 +181,7 @@ class RsyncService:
         server_name: Optional[str] = None,
         schedule: Optional[str] = None,
         volatile_files: Optional[List[str]] = None,
+        host_key: Optional[str] = None,
     ) -> Tuple[bool, str, dict]:
         """
         Execute incremental rsync backup from remote server to local path.
@@ -182,7 +203,11 @@ class RsyncService:
         Returns:
             Tuple of (success, log_output, stats)
         """
+        temp_known_hosts = None
         try:
+            if host_key:
+                temp_known_hosts = self._write_known_hosts(host_key)
+
             # Create base backup directory for this job using UUID
             if not backup_uuid:
                 raise ValueError("backup_uuid is required")
@@ -224,10 +249,14 @@ class RsyncService:
                 cmd.append(f"--link-dest={relative_link_path}")
             
             # Add SSH options with timeout
-            ssh_cmd = f"ssh -p {port} -o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+            if host_key and temp_known_hosts:
+                host_opts = f"-o StrictHostKeyChecking=yes -o UserKnownHostsFile={shlex.quote(temp_known_hosts)}"
+            else:
+                host_opts = "-o StrictHostKeyChecking=no"
+            ssh_cmd = f"ssh -p {port} {host_opts} -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
             if ssh_key_path:
                 os.chmod(ssh_key_path, 0o600)
-                ssh_cmd += f" -i {ssh_key_path}"
+                ssh_cmd += f" -i {shlex.quote(ssh_key_path)}"
             
             cmd.extend(["-e", ssh_cmd])
             
@@ -279,11 +308,11 @@ class RsyncService:
                 import shutil as _shutil
                 rsync_bin2 = _shutil.which('rsync') or 'rsync'
                 ssh_cmd = (
-                    f"ssh -p {port} -o StrictHostKeyChecking=no "
+                    f"ssh -p {port} {host_opts} "
                     f"-o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
                 )
                 if ssh_key_path:
-                    ssh_cmd += f" -i {ssh_key_path}"
+                    ssh_cmd += f" -i {shlex.quote(ssh_key_path)}"
 
                 pass2_cmd = [
                     rsync_bin2,
@@ -399,6 +428,12 @@ class RsyncService:
                 'volatile_files_synced': [],
                 'volatile_files_failed': [],
             }
+        finally:
+            if temp_known_hosts:
+                try:
+                    os.unlink(temp_known_hosts)
+                except OSError:
+                    pass
     
     def _format_bytes(self, bytes_val: int) -> str:
         """Format bytes into human-readable string."""

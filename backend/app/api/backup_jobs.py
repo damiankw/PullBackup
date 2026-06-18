@@ -371,6 +371,7 @@ def execute_backup(job_id: int, history_id: int):
             server_name=server.name,
             schedule=job.schedule,
             volatile_files=current_volatile,
+            host_key=server.host_key,
         )
 
         history.status = BackupStatus.SUCCESS if success else BackupStatus.FAILED
