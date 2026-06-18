@@ -243,7 +243,10 @@ def test_server_connection(
     server.last_connection_test = datetime.now()
     server.connection_test_success = success
     db.commit()
-    
+
+    if not success:
+        raise HTTPException(status_code=400, detail=message)
+
     return {
         "success": success,
         "message": message,
