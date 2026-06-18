@@ -15,6 +15,9 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+ARG VERSION=dev
+ENV APP_VERSION=${VERSION}
+
 WORKDIR /app
 
 COPY backend/requirements.txt .
