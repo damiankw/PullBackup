@@ -146,7 +146,7 @@ export default function TerminalPage() {
       backendHost = `${window.location.hostname}:8000`;
     }
 
-    const url = `${protocol}://${backendHost}/api/terminal/ws/${selected}?token=${token}`;
+    const url = `${protocol}://${backendHost}/api/terminal/ws/${selected}`;
     try { window.__terminalDebug.push({evt:'ws_url', url}); } catch (_) {}
     console.log('Terminal.connect url', url);
     try { t?.writeln('\r\n\x1b[33mConnecting to server...\x1b[0m\r\n'); } catch (_) {}
@@ -157,6 +157,7 @@ export default function TerminalPage() {
     ws.onopen = () => {
       try { window.__terminalDebug.push({evt:'ws_open'}); } catch (_) {}
       console.log('Terminal WebSocket open');
+      ws.send(token);
       try { t?.writeln('\x1b[32mConnected to server\x1b[0m'); } catch (e) {}
       try { t?.focus(); } catch (e) {}
     };

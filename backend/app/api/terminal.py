@@ -1,4 +1,4 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 import asyncio
 import os
@@ -26,16 +26,23 @@ def _get_user_from_token(token: str, db: Session) -> User | None:
 
 
 @router.websocket('/ws/{server_id}')
-async def websocket_ssh(websocket: WebSocket, server_id: int, token: str = Query(None)):
+async def websocket_ssh(websocket: WebSocket, server_id: int):
     """WebSocket endpoint that proxies a local ssh process to the browser terminal.
 
-    Authentication: provide `?token=<JWT>` in the websocket URL. The token is
-    validated against the same JWT decoder used for HTTP routes.
+    Authentication: the client must send the JWT as the first text message after
+    the connection is established. The connection is closed if the token is missing,
+    invalid, or not received within 10 seconds.
     """
     await websocket.accept()
 
     db = SessionLocal()
     try:
+        try:
+            token = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
+        except (asyncio.TimeoutError, Exception):
+            await websocket.close(code=1008)
+            return
+
         user = _get_user_from_token(token, db)
         if user is None:
             await websocket.close(code=1008)
