@@ -215,11 +215,7 @@ export default function Login() {
               </Button>
             </Box>
 
-            <Box sx={{ mt: 3, textAlign: 'center' }}>
-              <Typography variant="caption" color="text.secondary">
-                Default credentials: admin / admin
-              </Typography>
-            </Box>
+
           </Paper>
         </Box>
       </Container>

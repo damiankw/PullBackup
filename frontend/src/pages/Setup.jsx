@@ -54,7 +54,7 @@ export default function Setup({ onComplete }) {
   const [showPassword, setShowPassword] = useState(false);
 
   // Step 2
-  const [backupDir, setBackupDir] = useState('/backups');
+  const [backupDir, setBackupDir] = useState('./data/backups');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerPath, setPickerPath] = useState('/');
   const [pickerDirs, setPickerDirs] = useState([]);

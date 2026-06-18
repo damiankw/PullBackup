@@ -25,6 +25,17 @@ import {
   Divider,
   InputAdornment,
   IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  ListItem,
+  Breadcrumbs,
+  Link,
 } from '@mui/material';
 import {
   People as PeopleIcon,
@@ -38,6 +49,10 @@ import {
   Error as ErrorIcon,
   CheckCircle as CheckCircleIcon,
   Refresh as RefreshIcon,
+  Folder as FolderIcon,
+  FolderOpen as FolderOpenIcon,
+  ArrowUpward as ArrowUpwardIcon,
+  NavigateNext as NavigateNextIcon,
 } from '@mui/icons-material';
 import Users from './Users';
 import api from '../api';
@@ -360,6 +375,161 @@ function EmailSettings() {
         </Box>
       </Paper>
     </Box>
+  );
+}
+
+function StorageSettings() {
+  const [backupDir, setBackupDir] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState({ type: '', text: '' });
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerPath, setPickerPath] = useState('/');
+  const [pickerDirs, setPickerDirs] = useState([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerError, setPickerError] = useState('');
+
+  useEffect(() => {
+    api.get('/system/backup-dir').then(r => setBackupDir(r.data.backup_dir)).catch(() => {});
+  }, []);
+
+  const loadPickerDirs = async (path) => {
+    setPickerLoading(true);
+    setPickerError('');
+    try {
+      const res = await api.get('/setup/browse-dirs', { params: { path } });
+      setPickerPath(res.data.path);
+      setPickerDirs(res.data.dirs);
+    } catch (e) {
+      setPickerError(e.response?.data?.detail || 'Failed to browse directories');
+    } finally {
+      setPickerLoading(false);
+    }
+  };
+
+  const handleOpenPicker = () => {
+    loadPickerDirs(backupDir || '/');
+    setPickerOpen(true);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage({ type: '', text: '' });
+    try {
+      await api.put('/system/backup-dir', { backup_dir: backupDir });
+      setMessage({ type: 'success', text: 'Backup directory updated successfully' });
+    } catch (e) {
+      setMessage({ type: 'error', text: e.response?.data?.detail || 'Failed to update backup directory' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const breadcrumbParts = pickerPath === '/' ? [] : pickerPath.split('/').filter(Boolean);
+
+  return (
+    <Paper sx={{ p: 4 }}>
+      <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 1 }}>
+        Backup Storage Location
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Where backup snapshots are stored. Use an absolute path or a relative path (e.g. a NAS mount point). Changes take effect immediately — existing backups are not moved.
+      </Typography>
+
+      {message.text && (
+        <Alert severity={message.type} sx={{ mb: 3 }} onClose={() => setMessage({ type: '', text: '' })}>
+          {message.text}
+        </Alert>
+      )}
+
+      <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
+        <TextField
+          fullWidth
+          label="Backup Directory"
+          value={backupDir}
+          onChange={(e) => setBackupDir(e.target.value)}
+          placeholder="./data/backups"
+        />
+        <Button
+          variant="outlined"
+          startIcon={<FolderOpenIcon />}
+          onClick={handleOpenPicker}
+          sx={{ textTransform: 'none', whiteSpace: 'nowrap', minWidth: 120 }}
+        >
+          Browse
+        </Button>
+      </Box>
+
+      <Button
+        variant="contained"
+        onClick={handleSave}
+        disabled={saving || !backupDir}
+        sx={{ textTransform: 'none' }}
+      >
+        {saving ? 'Saving...' : 'Save'}
+      </Button>
+
+      <Dialog open={pickerOpen} onClose={() => setPickerOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Choose Backup Directory</DialogTitle>
+        <DialogContent>
+          <Breadcrumbs separator={<NavigateNextIcon fontSize="small" />} sx={{ mb: 2 }}>
+            <Link component="button" variant="body2" onClick={() => loadPickerDirs('/')}>
+              /
+            </Link>
+            {breadcrumbParts.map((part, i) => {
+              const path = '/' + breadcrumbParts.slice(0, i + 1).join('/');
+              return (
+                <Link key={path} component="button" variant="body2" onClick={() => loadPickerDirs(path)}>
+                  {part}
+                </Link>
+              );
+            })}
+          </Breadcrumbs>
+
+          {pickerLoading ? (
+            <LinearProgress />
+          ) : pickerError ? (
+            <Alert severity="error">{pickerError}</Alert>
+          ) : (
+            <List dense sx={{ maxHeight: 300, overflow: 'auto' }}>
+              {pickerPath !== '/' && (
+                <ListItemButton onClick={() => {
+                  const parent = pickerPath.split('/').slice(0, -1).join('/') || '/';
+                  loadPickerDirs(parent);
+                }}>
+                  <ListItemIcon><ArrowUpwardIcon /></ListItemIcon>
+                  <ListItemText primary=".." />
+                </ListItemButton>
+              )}
+              {pickerDirs.map((dir) => (
+                <ListItemButton key={dir.path} onClick={() => loadPickerDirs(dir.path)}>
+                  <ListItemIcon><FolderIcon /></ListItemIcon>
+                  <ListItemText primary={dir.name} />
+                </ListItemButton>
+              ))}
+              {pickerDirs.length === 0 && !pickerLoading && (
+                <ListItem>
+                  <ListItemText primary="No subdirectories" secondary="Use this path or type one manually" />
+                </ListItem>
+              )}
+            </List>
+          )}
+
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            Selected: <strong>{pickerPath}</strong>
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPickerOpen(false)}>Cancel</Button>
+          <Button
+            onClick={() => { setBackupDir(pickerPath); setPickerOpen(false); }}
+            variant="contained"
+            disabled={pickerLoading}
+          >
+            Select This Folder
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Paper>
   );
 }
 
@@ -903,11 +1073,20 @@ export default function Settings() {
               minHeight: 64,
             }}
           />
-          <Tab 
-            icon={<EmailIcon />} 
+          <Tab
+            icon={<EmailIcon />}
             iconPosition="start"
-            label="Email" 
-            sx={{ 
+            label="Email"
+            sx={{
+              fontWeight: 600,
+              minHeight: 64,
+            }}
+          />
+          <Tab
+            icon={<StorageIcon />}
+            iconPosition="start"
+            label="Storage"
+            sx={{
               fontWeight: 600,
               minHeight: 64,
             }}
@@ -923,6 +1102,9 @@ export default function Settings() {
           </TabPanel>
           <TabPanel value={currentTab} index={2}>
             <EmailSettings />
+          </TabPanel>
+          <TabPanel value={currentTab} index={3}>
+            <StorageSettings />
           </TabPanel>
         </Box>
       </Paper>

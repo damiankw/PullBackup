@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     TOKEN_AUDIENCE: str = "pullbackup"
     
     # Backup Settings
-    BACKUP_ROOT_DIR: str = "/backups"
+    BACKUP_ROOT_DIR: str = "./data/backups"
     SSH_KEYS_DIR: str = "./data/ssh_keys"
     MAX_PARALLEL_BACKUPS: int = 3
     RSYNC_OPTIONS: str = "-avz --no-owner --no-group"

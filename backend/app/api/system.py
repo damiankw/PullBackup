@@ -6,10 +6,12 @@ import shutil
 import psutil
 from datetime import datetime, timedelta
 from croniter import croniter
+from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.api.deps import get_current_active_user
-from app.models.models import User, UserRole, BackupJob, BackupHistory, Server, SSHKey
+from app.core.config import settings
+from app.models.models import User, UserRole, BackupJob, BackupHistory, Server, SSHKey, SystemSettings
 from app.services.scheduler import backup_scheduler
 
 router = APIRouter()
@@ -31,7 +33,7 @@ def get_system_info(
         db_size = os.path.getsize(db_path)
     
     # Get backup storage info
-    backup_path = "/backups"
+    backup_path = settings.BACKUP_ROOT_DIR
     storage_total = 0
     storage_used = 0
     storage_free = 0
@@ -138,7 +140,7 @@ def get_storage_stats(
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    backup_path = "/backups"
+    backup_path = settings.BACKUP_ROOT_DIR
     job_stats = []
     
     if os.path.exists(backup_path):
@@ -342,7 +344,7 @@ def health_check(
                 })
     
     # Check storage availability
-    backup_path = "/backups"
+    backup_path = settings.BACKUP_ROOT_DIR
     storage_available = True
     storage_error = None
     
@@ -378,3 +380,53 @@ def health_check(
         "critical_count": len([i for i in issues if i['severity'] == 'critical']),
         "active_jobs_checked": len(active_jobs)
     }
+
+
+class BackupDirUpdate(BaseModel):
+    backup_dir: str
+
+
+@router.get("/backup-dir")
+def get_backup_dir(
+    current_user: User = Depends(get_current_active_user),
+):
+    """Get current backup root directory."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return {"backup_dir": settings.BACKUP_ROOT_DIR}
+
+
+@router.put("/backup-dir")
+def update_backup_dir(
+    data: BackupDirUpdate,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Update backup root directory."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    path = data.backup_dir.strip()
+    if not path:
+        raise HTTPException(status_code=400, detail="Backup directory path cannot be empty")
+
+    try:
+        os.makedirs(path, exist_ok=True)
+        test_file = os.path.join(path, ".write_test")
+        with open(test_file, "w") as f:
+            f.write("ok")
+        os.remove(test_file)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Cannot create or write to directory: {e}")
+
+    row = db.query(SystemSettings).filter(SystemSettings.key == "backup_root_dir").first()
+    if row:
+        row.value = path
+    else:
+        row = SystemSettings(key="backup_root_dir", value=path)
+        db.add(row)
+    db.commit()
+
+    settings.BACKUP_ROOT_DIR = path
+
+    return {"backup_dir": path, "message": "Backup directory updated successfully"}

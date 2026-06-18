@@ -95,7 +95,7 @@ def complete_setup(data: SetupRequest, db: Session = Depends(get_db)):
 @router.get("/browse-dirs")
 def browse_dirs(path: str = "/"):
     """Browse server-side directories for the backup location picker."""
-    path = os.path.normpath(path)
+    path = os.path.realpath(path)
 
     if not os.path.isdir(path):
         raise HTTPException(status_code=404, detail="Path not found")
