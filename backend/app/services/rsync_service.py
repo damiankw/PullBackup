@@ -601,7 +601,7 @@ class RsyncService:
         user_keys_dir.mkdir(parents=True, exist_ok=True)
         
         # Generate safe filename
-        safe_name = "".join(c for c in key_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        safe_name = "".join(c for c in key_name if c.isalnum() or c in ('-', '_')).rstrip() or "key"
         key_file = user_keys_dir / f"{safe_name}.pem"
         
         # Write key file with proper line endings

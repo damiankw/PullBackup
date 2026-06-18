@@ -1,8 +1,48 @@
 import json
+import re
 from pydantic import BaseModel, EmailStr, validator
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
+
+# --- Input validation helpers ---
+
+_HOSTNAME_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._:\[\]-]*$')
+_USERNAME_RE = re.compile(r'^[a-zA-Z0-9._@-]+$')
+_PATH_DANGEROUS = set(';&|`$(){}\\<>\r\n\x00')
+
+
+def _check_hostname(v: str) -> str:
+    v = v.strip()
+    if not v:
+        raise ValueError('Hostname is required')
+    if not _HOSTNAME_RE.match(v):
+        raise ValueError('Hostname contains invalid characters (allowed: letters, digits, . _ : [ ] -)')
+    return v
+
+
+def _check_username(v: str) -> str:
+    v = v.strip()
+    if not v:
+        raise ValueError('Username is required')
+    if not _USERNAME_RE.match(v):
+        raise ValueError('Username contains invalid characters (allowed: letters, digits, . _ @ -)')
+    return v
+
+
+def _check_port(v: int) -> int:
+    if not 1 <= v <= 65535:
+        raise ValueError('Port must be between 1 and 65535')
+    return v
+
+
+def _check_remote_path(v: str) -> str:
+    v = v.strip()
+    if not v.startswith('/'):
+        raise ValueError('Remote path must be an absolute path starting with /')
+    if any(c in _PATH_DANGEROUS for c in v):
+        raise ValueError('Remote path contains shell metacharacters')
+    return v
 
 
 def _parse_json_list(v) -> List[str]:
@@ -116,6 +156,18 @@ class ServerBase(BaseModel):
     description: Optional[str] = None
     ssh_key_id: Optional[int] = None
 
+    @validator('hostname')
+    def validate_hostname(cls, v):
+        return _check_hostname(v)
+
+    @validator('username')
+    def validate_username(cls, v):
+        return _check_username(v)
+
+    @validator('port')
+    def validate_port(cls, v):
+        return _check_port(v)
+
 
 class ServerCreate(ServerBase):
     pass
@@ -130,6 +182,18 @@ class ServerUpdate(BaseModel):
     ssh_key_id: Optional[int] = None
     is_active: Optional[bool] = None
     host_key: Optional[str] = None
+
+    @validator('hostname', pre=True, always=False)
+    def validate_hostname(cls, v):
+        return _check_hostname(v) if v is not None else v
+
+    @validator('username', pre=True, always=False)
+    def validate_username(cls, v):
+        return _check_username(v) if v is not None else v
+
+    @validator('port', pre=True, always=False)
+    def validate_port(cls, v):
+        return _check_port(int(v)) if v is not None else v
 
 
 class Server(ServerBase):
@@ -153,7 +217,11 @@ class BackupJobBase(BaseModel):
     remote_path: str
     schedule: Optional[str] = None
     rsync_options: Optional[str] = None
-    
+
+    @validator('remote_path')
+    def validate_remote_path(cls, v):
+        return _check_remote_path(v)
+
     @validator('schedule')
     def validate_schedule(cls, v):
         if v and v.strip():
@@ -223,6 +291,10 @@ class BackupJobUpdate(BaseModel):
     rsync_options: Optional[str] = None
     is_active: Optional[bool] = None
     volatile_files: Optional[List[str]] = None
+
+    @validator('remote_path', pre=True, always=False)
+    def validate_remote_path(cls, v):
+        return _check_remote_path(v) if v is not None else v
 
 
 class BackupJob(BackupJobBase):
