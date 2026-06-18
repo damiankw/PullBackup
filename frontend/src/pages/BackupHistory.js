@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Paper,
@@ -47,6 +47,8 @@ export default function BackupHistory() {
   const [totalCount, setTotalCount] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [copyMessage, setCopyMessage] = useState('');
+  const logRef = useRef(null);
   
   // Filter states
   const [filters, setFilters] = useState({
@@ -184,10 +186,33 @@ export default function BackupHistory() {
   const handleCopySnapshot = async (snapshotName) => {
     try {
       await navigator.clipboard.writeText(snapshotName);
+      setCopyMessage('Snapshot folder name copied to clipboard!');
       setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
+    }
+  };
+
+  const handleCopyLog = async () => {
+    try {
+      await navigator.clipboard.writeText(selectedLog?.log_output || '');
+      setCopyMessage('Log copied to clipboard!');
+      setCopySuccess(true);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  const handleLogKeyDown = (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+      e.preventDefault();
+      const el = logRef.current;
+      if (!el) return;
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
     }
   };
 
@@ -579,6 +604,9 @@ export default function BackupHistory() {
                 <strong>Output Log:</strong>
               </Typography>
               <Paper
+                ref={logRef}
+                tabIndex={0}
+                onKeyDown={handleLogKeyDown}
                 sx={{
                   p: 2,
                   backgroundColor: '#1e1e1e',
@@ -588,7 +616,9 @@ export default function BackupHistory() {
                   maxHeight: '400px',
                   overflow: 'auto',
                   whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-all'
+                  wordBreak: 'break-all',
+                  outline: 'none',
+                  cursor: 'text',
                 }}
               >
                 {selectedLog.log_output || 'No log output available'}
@@ -597,6 +627,13 @@ export default function BackupHistory() {
           )}
         </DialogContent>
         <DialogActions>
+          <Button
+            onClick={handleCopyLog}
+            startIcon={<ContentCopyIcon />}
+            disabled={!selectedLog?.log_output}
+          >
+            Copy Log
+          </Button>
           <Button onClick={() => setLogDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
@@ -608,7 +645,7 @@ export default function BackupHistory() {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
         <Alert severity="success" sx={{ width: '100%' }}>
-          Snapshot folder name copied to clipboard!
+          {copyMessage}
         </Alert>
       </Snackbar>
     </Box>
