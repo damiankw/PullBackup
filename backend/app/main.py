@@ -64,9 +64,12 @@ app = FastAPI(
 )
 
 # Configure CORS
+# In a unified deployment the frontend and API share the same origin, so these
+# headers are never sent for production traffic. They only matter when running
+# the CRA dev server (port 3000) against a local backend (port 8000).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=[o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

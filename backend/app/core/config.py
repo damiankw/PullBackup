@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: Optional[str] = None
     SMTP_FROM: str = "noreply@pullbackup.com"
     
+    # CORS — only relevant for local dev (CRA on :3000 vs backend on :8000).
+    # In production the frontend is served by the same origin so CORS never fires.
+    ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:8000"
+
     # Application
     DEBUG: bool = False
     
