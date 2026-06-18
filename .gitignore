@@ -48,6 +48,7 @@ ssh_keys/*.pem
 ssh_keys/*.key
 ssh_keys/*
 !ssh_keys/.gitkeep
+data/ssh_keys/
 
 # Backup data
 backups/*
@@ -64,6 +65,7 @@ yarn-error.log*
 # Frontend build
 frontend/build/
 frontend/dist/
+backend/frontend_build/
 
 # Testing
 .coverage
