@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/damiankw/PullBackup/compare/v1.1.0...v1.1.1) (2026-06-18)
+
+
+### Bug Fixes
+
+* add email-validator, print version and elapsed time on startup ([347b499](https://github.com/damiankw/PullBackup/commit/347b499742e96f03a9aded1ad027f62a20765ffb))
+
 # [1.1.0](https://github.com/damiankw/PullBackup/compare/v1.0.0...v1.1.0) (2026-06-18)
 
 
