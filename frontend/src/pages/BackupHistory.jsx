@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Paper,
@@ -33,10 +34,12 @@ import {
   FilterList as FilterListIcon,
   ContentCopy as ContentCopyIcon,
   FlashOn as FlashOnIcon,
+  FolderOpen as FolderOpenIcon,
 } from '@mui/icons-material';
 import api from '../api';
 
 export default function BackupHistory() {
+  const navigate = useNavigate();
   const [history, setHistory] = useState([]);
   const [selectedLog, setSelectedLog] = useState(null);
   const [logDialogOpen, setLogDialogOpen] = useState(false);
@@ -136,6 +139,10 @@ export default function BackupHistory() {
   const handleViewLog = (entry) => {
     setSelectedLog(entry);
     setLogDialogOpen(true);
+  };
+
+  const handleBrowseBackup = (entry) => {
+    navigate(`/browse?job=${entry.backup_job_id}&snapshot=${formatSnapshotName(entry.started_at)}`);
   };
 
   const getStatusChip = (status) => {
@@ -470,9 +477,20 @@ export default function BackupHistory() {
                   <Chip label={entry.triggered_by || 'Unknown'} size="small" variant="outlined" />
                 </TableCell>
                 <TableCell>
-                  <IconButton size="small" onClick={() => handleViewLog(entry)}>
-                    <VisibilityIcon />
-                  </IconButton>
+                  <Box sx={{ display: 'flex', gap: 0.5 }}>
+                    <Tooltip title="View Log">
+                      <IconButton size="small" onClick={() => handleViewLog(entry)}>
+                        <VisibilityIcon />
+                      </IconButton>
+                    </Tooltip>
+                    {entry.status === 'success' && entry.started_at && (
+                      <Tooltip title="Browse Backup Files">
+                        <IconButton size="small" onClick={() => handleBrowseBackup(entry)} sx={{ color: '#14b8a6' }}>
+                          <FolderOpenIcon />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </Box>
                 </TableCell>
               </TableRow>
             ))}
