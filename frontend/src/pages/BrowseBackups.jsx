@@ -115,6 +115,7 @@ export default function BrowseBackups() {
             );
             setItems(browseResponse.data.items);
             setCurrentPath(path || '');
+            setHasPreviousSnapshot(browseResponse.data.has_previous_snapshot || false);
           } catch (err) {
             setError('Failed to restore previous location');
           } finally {
