@@ -97,7 +97,21 @@ def create_backup_job(
         resource_name=backup_job.name,
         description=f"Created backup job '{backup_job.name}' for server '{server.name}'"
     )
-    
+
+    # Create the backup directory and drop a README immediately so the folder
+    # is self-documenting even before the first backup runs.
+    rsync_service.generate_readme(
+        backup_uuid=backup_job.backup_uuid,
+        job_name=backup_job.name,
+        server_name=server.name,
+        hostname=server.hostname,
+        port=server.port,
+        username=server.username,
+        remote_path=backup_job.remote_path,
+        schedule=backup_job.schedule,
+        rsync_options=backup_job.rsync_options,
+    )
+
     return backup_job
 
 
@@ -216,7 +230,22 @@ def update_backup_job(
             resource_name=job.name,
             description=f"Updated backup job '{job.name}': {', '.join(changes)}"
         )
-    
+
+    # Refresh the README so any name/server/schedule changes are reflected.
+    job_server = db.query(Server).filter(Server.id == job.server_id).first()
+    if job_server:
+        rsync_service.generate_readme(
+            backup_uuid=job.backup_uuid,
+            job_name=job.name,
+            server_name=job_server.name,
+            hostname=job_server.hostname,
+            port=job_server.port,
+            username=job_server.username,
+            remote_path=job.remote_path,
+            schedule=job.schedule,
+            rsync_options=job.rsync_options,
+        )
+
     return job
 
 
