@@ -5,10 +5,12 @@ import os
 import subprocess
 import tempfile
 import threading
+from datetime import datetime
 
 from app.core.database import SessionLocal
 from app.core.security import decode_access_token
-from app.models.models import Server, User
+from app.models.models import Server, User, AuditAction
+from app.services.audit_service import audit_service
 
 router = APIRouter()
 
@@ -81,6 +83,24 @@ async def websocket_ssh(websocket: WebSocket, server_id: int, token: str = Query
         )
         os.close(slave_fd)
 
+        session_start = datetime.now()
+        client_ip = (
+            websocket.headers.get("CF-Connecting-IP")
+            or websocket.headers.get("X-Real-IP")
+            or (websocket.client.host if websocket.client else None)
+        )
+        audit_service.log(
+            db=db,
+            action=AuditAction.EXECUTE,
+            user=user,
+            resource_type="terminal",
+            resource_id=server.id,
+            resource_name=server.name,
+            description=f"Opened terminal session to {server.name} ({server.hostname})",
+            ip_address=client_ip,
+            user_agent=websocket.headers.get("User-Agent"),
+        )
+
         loop = asyncio.get_event_loop()
 
         stop_event = threading.Event()
@@ -134,5 +154,17 @@ async def websocket_ssh(websocket: WebSocket, server_id: int, token: str = Query
                     os.unlink(temp_known_hosts)
                 except OSError:
                     pass
+            duration = int((datetime.now() - session_start).total_seconds())
+            audit_service.log(
+                db=db,
+                action=AuditAction.EXECUTE,
+                user=user,
+                resource_type="terminal",
+                resource_id=server.id,
+                resource_name=server.name,
+                description=f"Closed terminal session to {server.name} ({server.hostname}), duration {duration}s",
+                ip_address=client_ip,
+                user_agent=websocket.headers.get("User-Agent"),
+            )
     finally:
         db.close()
