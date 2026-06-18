@@ -3,10 +3,13 @@
 
 import sys
 import os
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
-# Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
+
+from app.version import __version__
 
 from app.core.database import engine, Base, SessionLocal
 from app.models.models import User, UserRole
@@ -64,13 +67,18 @@ def create_directories():
 
 
 if __name__ == "__main__":
+    start = time.monotonic()
+    started_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
     print("=" * 50)
-    print("PullBackup Database Initialization")
+    print(f"PullBackup v{__version__} — Database Initialization")
+    print(f"Started: {started_at}")
     print("=" * 50)
-    
+
     create_directories()
     init_db()
-    
+
+    elapsed = time.monotonic() - start
     print("=" * 50)
-    print("✓ Initialization complete!")
+    print(f"✓ Initialization complete! ({elapsed:.2f}s)")
     print("=" * 50)

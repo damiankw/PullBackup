@@ -12,6 +12,7 @@ from app.core.migrations import run_migrations
 from app.core.logging_config import setup_logging
 from app.api import auth, servers, ssh_keys, backup_jobs, backup_history, dashboard, users, browse, system, email, audit, terminal, setup
 from app.services.scheduler import backup_scheduler
+from app.version import __version__
 
 FRONTEND_DIR = Path(__file__).parent.parent / 'frontend_build'
 
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
-    logger.info("Starting PullBackup application")
+    logger.info(f"Starting PullBackup v{__version__}")
     
     # Run database migrations first
     run_migrations()
@@ -59,7 +60,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="PullBackup API",
     description="Enterprise backup system using rsync over SSH",
-    version="1.0.0",
+    version=__version__,
     lifespan=lifespan
 )
 
@@ -113,7 +114,7 @@ async def serve_spa(full_path: str):
     index = FRONTEND_DIR / 'index.html'
     if index.exists():
         return FileResponse(index)
-    return {"name": "PullBackup API", "version": "1.0.0", "status": "running"}
+    return {"name": "PullBackup API", "version": __version__, "status": "running"}
 
 
 if __name__ == "__main__":
