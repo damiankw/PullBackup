@@ -47,8 +47,8 @@ logs/
 data/ssh_keys/
 
 # Backup data
-backups/*
-!backups/.gitkeep
+backups/
+data/backups/
 
 # Node
 node_modules/
