@@ -28,9 +28,9 @@ COPY --from=frontend-build /frontend/build /app/frontend_build
 RUN groupadd --gid 1000 pullbackup && \
     useradd --uid 1000 --gid 1000 --no-create-home pullbackup
 
-RUN mkdir -p /app/data /app/data/ssh_keys /backups && \
+RUN mkdir -p /app/data /app/data/ssh_keys /app/data/backups && \
     chmod 700 /app/data/ssh_keys && \
-    chown -R pullbackup:pullbackup /app /backups
+    chown -R pullbackup:pullbackup /app
 
 USER pullbackup
 

@@ -24,7 +24,7 @@ pip install -r requirements.txt
 cd ..
 
 # Build the React frontend
-./build.sh local
+./deploy/build.sh local
 ```
 
 `build.sh local` compiles the frontend and copies it into `backend/frontend_build/`, where the backend serves it statically.
@@ -32,8 +32,8 @@ cd ..
 **Start**
 
 ```bash
-./run.sh
-# or: ./run.sh local
+./deploy/run.sh
+# or: ./deploy/run.sh local
 ```
 
 The app is available at `http://localhost:8000`.
@@ -70,26 +70,26 @@ The recommended way to run PullBackup in production.
 **Start**
 
 ```bash
-docker compose up -d
+docker compose -f deploy/docker-compose.yml up -d
 ```
 
 The app is available at `http://localhost:8000`.
 
 **Configuration**
 
-The `docker-compose.yml` sets sensible defaults. Before deploying to anything beyond a local test, set a real `SECRET_KEY`:
+`deploy/docker-compose.yml` sets sensible defaults. Before deploying to anything beyond a local test, set a real `SECRET_KEY`:
 
 ```bash
 # In your shell, or in a .env file at the repo root
 export SECRET_KEY=$(openssl rand -hex 32)
-docker compose up -d
+docker compose -f deploy/docker-compose.yml up -d
 ```
 
-To persist backups to a specific location, update the volume mount in `docker-compose.yml`:
+To persist backups to a NAS or external disk, update the volume mount in `deploy/docker-compose.yml`:
 
 ```yaml
 volumes:
-  - /your/backup/disk:/backups
+  - /your/nas/backup:/app/data/backups
 ```
 
 SMTP notifications are disabled by default. Add `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASSWORD` to the environment block if you want them.
@@ -97,7 +97,7 @@ SMTP notifications are disabled by default. Add `SMTP_HOST`, `SMTP_PORT`, `SMTP_
 **Logs**
 
 ```bash
-docker compose logs -f
+docker compose -f deploy/docker-compose.yml logs -f
 ```
 
 ---
@@ -114,13 +114,13 @@ For running PullBackup in a Kubernetes cluster.
 
 ```bash
 # Build the Docker image
-./build.sh docker
+./deploy/build.sh docker
 
 # Import into MicroK8s (if not using a registry)
-./k8s/import-to-microk8s.sh
+./deploy/k8s/import-to-microk8s.sh
 
 # Deploy
-./k8s/deploy.sh
+./deploy/k8s/deploy.sh
 ```
 
 Check the deployment:
@@ -131,7 +131,7 @@ kubectl get pods -n pullbackup
 
 **Configuration**
 
-Set `SECRET_KEY` and other environment variables via a Kubernetes Secret or ConfigMap and reference them in the deployment manifest. See `k8s/deployment.yaml` for the expected environment variable names. For NFS-backed backup storage, see `k8s/deployment-nfs.yaml`.
+Set `SECRET_KEY` and other environment variables via a Kubernetes Secret or ConfigMap and reference them in the deployment manifest. See `deploy/k8s/deployment.yaml` for the expected environment variable names. For NFS-backed backup storage, see `deploy/k8s/deployment-nfs.yaml`.
 
 ---
 
@@ -180,7 +180,7 @@ When a job is created, its backup directory is created immediately and a `README
 
 ## Troubleshooting
 
-**Container won't start** — check `docker compose logs`. Verify port 8000 is free and the backup volume mount path exists.
+**Container won't start** — check `docker compose -f deploy/docker-compose.yml logs`. Verify port 8000 is free and the data volume mount path exists.
 
 **Setup wizard doesn't appear** — check the backend logs for errors during startup. Clear browser localStorage and reload.
 
@@ -188,4 +188,3 @@ When a job is created, its backup directory is created immediately and a `README
 
 **Backup fails** — open the log in Backup History. Common causes: remote path doesn't exist, SSH user lacks read permission, or the backup volume is full.
 
-For more detail see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).

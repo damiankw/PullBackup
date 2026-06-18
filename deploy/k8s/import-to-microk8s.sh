@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$SCRIPT_DIR/../.."
+
 echo "======================================"
 echo "PullBackup - MicroK8s Import Script"
 echo "======================================"
@@ -18,10 +21,10 @@ NC='\033[0m' # No Color
 
 echo -e "${YELLOW}Step 1/5: Building images with Podman${NC}"
 echo "Building backend..."
-podman build -t pullbackup-backend:${IMAGE_TAG} -f Dockerfile.backend .
+podman build -t pullbackup-backend:${IMAGE_TAG} -f "$ROOT_DIR/Dockerfile.backend" "$ROOT_DIR"
 
 echo "Building frontend..."
-podman build -t pullbackup-frontend:${IMAGE_TAG} -f Dockerfile.frontend .
+podman build -t pullbackup-frontend:${IMAGE_TAG} -f "$ROOT_DIR/Dockerfile.frontend" "$ROOT_DIR"
 
 echo ""
 echo -e "${YELLOW}Step 2/5: Saving images to tar files${NC}"
@@ -39,7 +42,7 @@ rm /tmp/pullbackup-backend.tar /tmp/pullbackup-frontend.tar
 
 echo ""
 echo -e "${YELLOW}Step 5/5: Deploying to MicroK8s${NC}"
-microk8s kubectl apply -f k8s/deployment-nfs.yaml
+microk8s kubectl apply -f "$SCRIPT_DIR/deployment-nfs.yaml"
 
 echo ""
 echo -e "${GREEN}✓ Import complete!${NC}"
@@ -63,10 +66,6 @@ echo "To access the application:"
 echo "  microk8s kubectl port-forward -n pullbackup svc/pullbackup-frontend 3000:80"
 echo ""
 echo "Then open: http://localhost:3000"
-echo ""
-echo "Default credentials:"
-echo "  Username: admin"
-echo "  Password: admin"
 echo ""
 echo "Useful commands:"
 echo "  View backend logs:  microk8s kubectl logs -f -n pullbackup deployment/pullbackup-backend"

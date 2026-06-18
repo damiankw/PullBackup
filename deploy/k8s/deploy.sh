@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 echo "Deploying PullBackup to Kubernetes..."
 
 # Check if kubectl is available
@@ -11,7 +13,7 @@ fi
 
 # Apply Kubernetes manifests
 echo "Applying Kubernetes manifests..."
-kubectl apply -f k8s/deployment.yaml
+kubectl apply -f "$SCRIPT_DIR/deployment.yaml"
 
 echo "Waiting for deployments to be ready..."
 kubectl wait --for=condition=available --timeout=300s \
@@ -26,10 +28,6 @@ echo "To access the application:"
 echo "  kubectl port-forward -n pullbackup svc/pullbackup-frontend 3000:80"
 echo ""
 echo "Then open: http://localhost:3000"
-echo ""
-echo "Default credentials:"
-echo "  Username: admin"
-echo "  Password: admin"
 echo ""
 echo "To view logs:"
 echo "  Backend:  kubectl logs -f -n pullbackup deployment/pullbackup-backend"
