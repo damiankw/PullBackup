@@ -102,39 +102,6 @@ docker compose -f deploy/docker-compose.yml logs -f
 
 ---
 
-## Kubernetes
-
-For running PullBackup in a Kubernetes cluster.
-
-**Prerequisites**
-- A running cluster (tested with MicroK8s)
-- `kubectl` configured
-
-**Build and deploy**
-
-```bash
-# Build the Docker image
-./deploy/build.sh docker
-
-# Import into MicroK8s (if not using a registry)
-./deploy/k8s/import-to-microk8s.sh
-
-# Deploy
-./deploy/k8s/deploy.sh
-```
-
-Check the deployment:
-
-```bash
-kubectl get pods -n pullbackup
-```
-
-**Configuration**
-
-Set `SECRET_KEY` and other environment variables via a Kubernetes Secret or ConfigMap and reference them in the deployment manifest. See `deploy/k8s/deployment.yaml` for the expected environment variable names. For NFS-backed backup storage, see `deploy/k8s/deployment-nfs.yaml`.
-
----
-
 ## First Run
 
 Regardless of deployment method, when you first open the app in a browser you will be greeted by the setup wizard. This wizard runs once — when no users exist in the database.

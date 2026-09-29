@@ -24,7 +24,7 @@ Open `http://localhost:8000` — the setup wizard will run on first launch to cr
 
 ## Setup
 
-See [SETUP.md](SETUP.md) for local development, Docker, and Kubernetes deployment instructions.
+See [SETUP.md](SETUP.md) for local development and Docker deployment instructions.
 
 ## API
 
