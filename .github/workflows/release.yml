@@ -15,6 +15,8 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,3 +49,85 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx semantic-release --debug
+
+      # semantic-release tags the release commit locally before pushing, so a
+      # vX.Y.Z tag on HEAD means a release was just published. No tag means no
+      # releasable commits, and the image job is skipped.
+      - name: Get released version
+        id: version
+        run: |
+          TAG=$(git tag --points-at HEAD --list 'v*' | head -n1)
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "Released version: ${TAG:-none}"
+
+  # Built here rather than in a tag-triggered workflow because tags pushed with
+  # GITHUB_TOKEN do not trigger other workflows.
+  image:
+    name: Publish image to GHCR
+    needs: release
+    if: needs.release.outputs.version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    env:
+      VERSION: ${{ needs.release.outputs.version }}
+      IMAGE: ghcr.io/${{ github.repository_owner }}/pullbackup
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.release.outputs.version }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}},value=v${{ env.VERSION }}
+            type=semver,pattern={{major}}.{{minor}},value=v${{ env.VERSION }}
+            type=semver,pattern={{major}},value=v${{ env.VERSION }}
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./deploy/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ env.VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Add image to release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "v$VERSION" --json body --jq .body > notes.md
+          if grep -q "$IMAGE" notes.md; then
+            echo "Release notes already list the image"
+            exit 0
+          fi
+          cat >> notes.md <<EOF
+
+          ## Docker image
+
+          \`\`\`bash
+          docker pull $IMAGE:$VERSION
+          \`\`\`
+          EOF
+          gh release edit "v$VERSION" --notes-file notes.md

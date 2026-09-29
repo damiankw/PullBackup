@@ -1,6 +1,6 @@
 # Versioning
 
-PullBackup uses [Conventional Commits](https://www.conventionalcommits.org/) and [semantic-release](https://semantic-release.gitbook.io/) to automate versioning. Pushing to `main` automatically determines the next version, generates a changelog, creates a GitHub release, and triggers a Docker image build.
+PullBackup uses [Conventional Commits](https://www.conventionalcommits.org/) and [semantic-release](https://semantic-release.gitbook.io/) to automate versioning. Pushing to `main` automatically determines the next version, creates a GitHub release, and publishes a Docker image to GitHub Container Registry.
 
 ## Commit Format
 
@@ -58,6 +58,15 @@ On every push to `main`:
 
 1. **semantic-release** analyses commits since the last tag
 2. Determines the next version (or skips if no releasable commits)
-3. Updates `CHANGELOG.md` and tags the commit `vX.Y.Z`
+3. Tags the commit `vX.Y.Z`
 4. Creates a GitHub release with generated notes
-5. **docker-publish** builds and pushes the image to DockerHub tagged `vX.Y.Z`, `X.Y`, `X`, and `latest`
+5. Builds the image from the tag and pushes it to `ghcr.io/damiankw/pullbackup` tagged `X.Y.Z`, `X.Y`, `X`, and `latest`
+6. Appends the `docker pull` command to the release notes
+
+Both steps run in `.github/workflows/release.yml`. The image build lives in the same workflow because tags pushed with `GITHUB_TOKEN` don't trigger other workflows.
+
+The package inherits the repository's visibility. While the repo is private, pulling needs a login with a personal access token that has the `read:packages` scope:
+
+```bash
+echo <token> | docker login ghcr.io -u damiankw --password-stdin
+```
